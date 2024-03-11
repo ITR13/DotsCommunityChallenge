@@ -3,5 +3,5 @@ using Unity.Mathematics;
 
 public struct GroupPosition : IComponentData
 {
-    public float2 Position;
+    public int2 Position;
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -123,6 +124,8 @@ namespace NativeQuadTree
             {
                 elements->Resize(math.max(incomingElements.Length, elements->Capacity * 2));
             }
+            
+            CheckBounds(incomingElements, bounds);
 
             // Prepare morton codes
             var mortonCodes = new NativeArray<int>(incomingElements.Length, Allocator.Temp);
@@ -179,6 +182,17 @@ namespace NativeQuadTree
             mortonCodes.Dispose();
         }
 
+        [BurstDiscard]
+        private void CheckBounds(in NativeArray<QuadElement<T>> incomingElements, in AABB2D bounds)
+        {
+            for (var i = 0; i < incomingElements.Length; i++)
+            {
+                var pos = incomingElements[i].pos;
+                if (bounds.Contains(pos)) continue;
+                throw new ArgumentException($"Element {i} at {pos} is not in bounds {bounds}");
+            }
+        }
+
         int IncrementIndex(int depth, NativeArray<int> mortonCodes, int i, int atIndex)
         {
             var atDepth = math.max(0, maxDepth - depth);
@@ -212,7 +226,7 @@ namespace NativeQuadTree
                 }
             }
         }
-
+        
         public readonly void RangeQuery(AABB2D bounds, NativeList<QuadElement<T>> results)
         {
 #if ENABLE_UNITY_COLLECTIONS_CHECKS && DISPOSE_SENTINEL

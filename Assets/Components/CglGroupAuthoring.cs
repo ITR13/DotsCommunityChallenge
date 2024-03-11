@@ -8,6 +8,8 @@ public class CglGroupAuthoring : MonoBehaviour
     {
         public override void Bake(CglGroupAuthoring authoring)
         {
+            // if (!authoring.gameObject.activeInHierarchy) return;
+
             var blink = 0b0000000001110111000000000111011100000000011101110000000001110111;
             var box = 0b110011001100110000000000;
             var glider = 0b000000010000010100000011000000000;
@@ -15,7 +17,7 @@ public class CglGroupAuthoring : MonoBehaviour
 
             var current = (ulong)0;
 
-            
+
             var entity = GetEntity(TransformUsageFlags.None);
             AddComponent(
                 entity,
@@ -51,18 +53,24 @@ public class CglGroupAuthoring : MonoBehaviour
                 }
             );
 
+            if (authoring.transform.parent == null)
+            {
+                AddComponent<GroupPosition>(entity);
+                return;
+            }
+
             var siblings = authoring.transform.parent.childCount;
             var index = authoring.transform.GetSiblingIndex();
 
             var width = Mathf.CeilToInt(math.sqrt(siblings));
             var x = index % width;
             var y = index / width;
-            
+
             AddComponent(
                 entity,
                 new GroupPosition
                 {
-                    Position = new float2(x, y) * Constants.PositionMultiplier,
+                    Position = new int2(x, y) * Constants.PositionMultiplier,
                 }
             );
         }

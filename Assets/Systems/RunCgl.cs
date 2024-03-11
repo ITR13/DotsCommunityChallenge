@@ -1,3 +1,4 @@
+using System;
 using NativeQuadTree;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
@@ -17,7 +18,7 @@ public partial struct RunCgl : ISystem
 
     public void OnCreate(ref SystemState state)
     {
-        state.RequireForUpdate<CurrentCglGroup>();
+        state.RequireForUpdate<NextCglGroup>();
 
         _positionTypeHandle = state.GetComponentTypeHandle<GroupPosition>(true);
         _currentTypeHandle = state.GetComponentTypeHandle<CurrentCglGroup>(true);
@@ -27,7 +28,7 @@ public partial struct RunCgl : ISystem
     public void OnUpdate(ref SystemState state)
     {
         var groupsQuery = SystemAPI.QueryBuilder().WithAll<GroupPosition, CurrentCglGroup>().WithAllRW<NextCglGroup>().Build();
-
+        
         var chunks = groupsQuery.CalculateChunkCountWithoutFiltering();
         var bounds = CollectionHelper.CreateNativeArray<AABB2D>(chunks, state.WorldUpdateAllocator);
 
@@ -38,6 +39,8 @@ public partial struct RunCgl : ISystem
         _positionTypeHandle.Update(ref state);
         _currentTypeHandle.Update(ref state);
         _nextTypeHandle.Update(ref state);
+
+        var activeGroups = new NativeParallelHashMap<int2, bool>(groups.Length, state.WorldUpdateAllocator);
 
         state.Dependency = new CalculateBoundsJob
         {
@@ -60,16 +63,37 @@ public partial struct RunCgl : ISystem
             NextTypeHandle = _nextTypeHandle,
             CurrentLookup = SystemAPI.GetComponentLookup<CurrentCglGroup>(true),
             GroupQuadTree = groupQuadTree,
+            ActiveGroups = activeGroups.AsParallelWriter(),
         }.ScheduleParallel(groupsQuery, state.Dependency);
 
-        state.Dependency = new SwapBuffersJob().Schedule(state.Dependency);
+        var toCreate = new NativeParallelHashSet<int2>(groups.Length * 8, state.WorldUpdateAllocator);
+        var toDestroy = new NativeParallelHashSet<Entity>(groups.Length, state.WorldUpdateAllocator);
+        state.Dependency = JobHandle.CombineDependencies(
+            new CollectStructuralChanges
+            {
+                ActiveGroups = activeGroups.AsReadOnly(),
+                ToCreate = toCreate.AsParallelWriter(),
+                ToDestroy = toDestroy.AsParallelWriter(),
+            }.ScheduleParallel(state.Dependency),
+            new SwapBuffersJob().ScheduleParallel(state.Dependency)
+        );
+
+        state.Dependency.Complete();
+        state.EntityManager.DestroyEntity(toDestroy.ToNativeArray(Allocator.Temp));
+
+        if (toCreate.IsEmpty) return;
+
+        foreach (var pos in toCreate)
+        {
+            var entity = state.EntityManager.CreateEntity(typeof(GroupPosition), typeof(CurrentCglGroup), typeof(NextCglGroup));
+            state.EntityManager.SetComponentData(entity, new GroupPosition {Position = pos});
+        }
     }
-    
+
     private class TextureHolder : IComponentData
     {
         public RenderTexture Texture;
     }
-    
 
     [BurstCompile]
     private struct CalculateBoundsJob : IJobChunk
@@ -93,6 +117,7 @@ public partial struct RunCgl : ISystem
                 min = math.min(min, current);
                 max = math.max(max, current);
             }
+
             max += Constants.PositionMultiplier;
 
             var size = math.cmax(max - min) / 2;
@@ -121,8 +146,8 @@ public partial struct RunCgl : ISystem
             var max = Bounds[0].Max;
             for (var i = 1; i < Bounds.Length; i++)
             {
-                min = math.min(min, Bounds[0].Min);
-                max = math.max(max, Bounds[0].Max);
+                min = math.min(min, Bounds[i].Min);
+                max = math.max(max, Bounds[i].Max);
             }
 
             var size = math.cmax(max - min) / 2;
@@ -154,6 +179,8 @@ public partial struct RunCgl : ISystem
 
         [ReadOnly] public NativeQuadTree<Entity> GroupQuadTree;
 
+        public NativeParallelHashMap<int2, bool>.ParallelWriter ActiveGroups;
+
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
             NativeArray<GroupPosition> positions = chunk.GetNativeArray(ref PositionTypeHandle);
@@ -173,7 +200,7 @@ public partial struct RunCgl : ISystem
                 var innerExtents = new float2(Constants.PositionMultiplier * 0.5f + 1.5f, Constants.PositionMultiplier * 0.5f + 1.5f);
 
                 var bounds = new AABB2D(position, extents);
-                var innerBounds = new AABB2D(position + Constants.PositionMultiplier * 0.5f, innerExtents);
+                var innerBounds = new AABB2D((float2)position + Constants.PositionMultiplier * 0.5f, innerExtents);
 
                 foundQuadElements.Clear();
                 GroupQuadTree.RangeQuery(bounds, foundQuadElements);
@@ -185,7 +212,13 @@ public partial struct RunCgl : ISystem
                     FillSubElementList(foundQuadElements, j, innerBounds, ref subQuadElements);
                 }
 
-                if (subQuadElements.Length == 0) continue;
+                if (subQuadElements.Length == 0)
+                {
+                    ActiveGroups.TryAdd(position, false);
+                    continue;
+                }
+
+                ActiveGroups.TryAdd(position, true);
 
                 subQuadTree.ClearAndBulkInsert(subQuadElements.ToArray(Allocator.Temp), innerBounds);
 
@@ -305,6 +338,52 @@ public partial struct RunCgl : ISystem
         {
             current.Data = next.Data;
             next.Data = new CglGroupData();
+        }
+    }
+
+    [BurstCompile]
+    public partial struct CollectStructuralChanges : IJobEntity
+    {
+        [ReadOnly] public NativeParallelHashMap<int2, bool>.ReadOnly ActiveGroups;
+        public NativeParallelHashSet<int2>.ParallelWriter ToCreate;
+        public NativeParallelHashSet<Entity>.ParallelWriter ToDestroy;
+
+        public void Execute(Entity entity, in GroupPosition positionComp)
+        {
+            var position = positionComp.Position;
+            var activeSelf = ActiveGroups[position];
+
+            if (activeSelf)
+            {
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    for (var dy = -1; dy <= 1; dy++)
+                    {
+                        var surroundingPos = new int2(position.x + dx * Constants.PositionMultiplier, position.y + dy * Constants.PositionMultiplier);
+                        if (!ActiveGroups.ContainsKey(surroundingPos))
+                        {
+                            ToCreate.Add(surroundingPos);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                var alive =
+                    ActiveGroups.TryGetValue(new int2(position.x - Constants.PositionMultiplier, position.y - Constants.PositionMultiplier), out bool otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x - 0, position.y - Constants.PositionMultiplier), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x + Constants.PositionMultiplier, position.y - Constants.PositionMultiplier), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x - Constants.PositionMultiplier, position.y - 0), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x + Constants.PositionMultiplier, position.y - 0), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x - Constants.PositionMultiplier, position.y + Constants.PositionMultiplier), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x - 0, position.y + Constants.PositionMultiplier), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x + Constants.PositionMultiplier, position.y + Constants.PositionMultiplier), out otherIsAlive) && otherIsAlive;
+
+                if (!alive)
+                {
+                    ToDestroy.Add(entity);
+                }
+            }
         }
     }
 }
