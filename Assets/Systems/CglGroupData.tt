@@ -1,0 +1,17 @@
+<#@ template language="C#" #>
+<#@ import namespace="System.Text" #>
+<#@ import namespace="System.Collections.Generic" #>
+using Unity.Collections;
+using Unity.Entities;
+
+public struct CglGroupData : IComponentData
+{
+<#
+    for (var i = 0; i < 16; i++)
+    {
+#>
+        public ulong Alive<#=i#>;
+<#
+    }
+#>
+}
