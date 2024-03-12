@@ -19,6 +19,7 @@ public partial struct RunCgl : ISystem
     public void OnCreate(ref SystemState state)
     {
         state.RequireForUpdate<NextCglGroup>();
+        state.RequireForUpdate<CalcMode>();
 
         _positionTypeHandle = state.GetComponentTypeHandle<GroupPosition>(true);
         _currentTypeHandle = state.GetComponentTypeHandle<CurrentCglGroup>(true);
@@ -27,8 +28,12 @@ public partial struct RunCgl : ISystem
 
     public void OnUpdate(ref SystemState state)
     {
+        var calcMode = SystemAPI.GetSingleton<CalcMode>();
+        if (calcMode.Algorithm != Algorithm.QuadTree) return;
+
+
         var groupsQuery = SystemAPI.QueryBuilder().WithAll<GroupPosition, CurrentCglGroup>().WithAllRW<NextCglGroup>().Build();
-        
+
         var chunks = groupsQuery.CalculateChunkCountWithoutFiltering();
         var bounds = CollectionHelper.CreateNativeArray<AABB2D>(chunks, state.WorldUpdateAllocator);
 
@@ -118,7 +123,7 @@ public partial struct RunCgl : ISystem
                 max = math.max(max, current);
             }
 
-            max += Constants.PositionMultiplier;
+            max += Constants.GroupTotalEdgeLength;
 
             var size = math.cmax(max - min) / 2;
 
@@ -196,11 +201,11 @@ public partial struct RunCgl : ISystem
             for (var i = 0; i < chunk.Count; i++)
             {
                 var position = positions[i].Position;
-                var extents = new float2(1.5f * Constants.PositionMultiplier, 1.5f * Constants.PositionMultiplier);
-                var innerExtents = new float2(Constants.PositionMultiplier * 0.5f + 1.5f, Constants.PositionMultiplier * 0.5f + 1.5f);
+                var extents = new float2(1.5f * Constants.GroupTotalEdgeLength, 1.5f * Constants.GroupTotalEdgeLength);
+                var innerExtents = new float2(Constants.GroupTotalEdgeLength * 0.5f + 1.5f, Constants.GroupTotalEdgeLength * 0.5f + 1.5f);
 
                 var bounds = new AABB2D(position, extents);
-                var innerBounds = new AABB2D((float2)position + Constants.PositionMultiplier * 0.5f, innerExtents);
+                var innerBounds = new AABB2D((float2)position + Constants.GroupTotalEdgeLength * 0.5f, innerExtents);
 
                 foundQuadElements.Clear();
                 GroupQuadTree.RangeQuery(bounds, foundQuadElements);
@@ -359,7 +364,7 @@ public partial struct RunCgl : ISystem
                 {
                     for (var dy = -1; dy <= 1; dy++)
                     {
-                        var surroundingPos = new int2(position.x + dx * Constants.PositionMultiplier, position.y + dy * Constants.PositionMultiplier);
+                        var surroundingPos = new int2(position.x + dx * Constants.GroupTotalEdgeLength, position.y + dy * Constants.GroupTotalEdgeLength);
                         if (!ActiveGroups.ContainsKey(surroundingPos))
                         {
                             ToCreate.Add(surroundingPos);
@@ -370,14 +375,14 @@ public partial struct RunCgl : ISystem
             else
             {
                 var alive =
-                    ActiveGroups.TryGetValue(new int2(position.x - Constants.PositionMultiplier, position.y - Constants.PositionMultiplier), out bool otherIsAlive) && otherIsAlive ||
-                    ActiveGroups.TryGetValue(new int2(position.x - 0, position.y - Constants.PositionMultiplier), out otherIsAlive) && otherIsAlive ||
-                    ActiveGroups.TryGetValue(new int2(position.x + Constants.PositionMultiplier, position.y - Constants.PositionMultiplier), out otherIsAlive) && otherIsAlive ||
-                    ActiveGroups.TryGetValue(new int2(position.x - Constants.PositionMultiplier, position.y - 0), out otherIsAlive) && otherIsAlive ||
-                    ActiveGroups.TryGetValue(new int2(position.x + Constants.PositionMultiplier, position.y - 0), out otherIsAlive) && otherIsAlive ||
-                    ActiveGroups.TryGetValue(new int2(position.x - Constants.PositionMultiplier, position.y + Constants.PositionMultiplier), out otherIsAlive) && otherIsAlive ||
-                    ActiveGroups.TryGetValue(new int2(position.x - 0, position.y + Constants.PositionMultiplier), out otherIsAlive) && otherIsAlive ||
-                    ActiveGroups.TryGetValue(new int2(position.x + Constants.PositionMultiplier, position.y + Constants.PositionMultiplier), out otherIsAlive) && otherIsAlive;
+                    ActiveGroups.TryGetValue(new int2(position.x - Constants.GroupTotalEdgeLength, position.y - Constants.GroupTotalEdgeLength), out bool otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x - 0, position.y - Constants.GroupTotalEdgeLength), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x + Constants.GroupTotalEdgeLength, position.y - Constants.GroupTotalEdgeLength), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x - Constants.GroupTotalEdgeLength, position.y - 0), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x + Constants.GroupTotalEdgeLength, position.y - 0), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x - Constants.GroupTotalEdgeLength, position.y + Constants.GroupTotalEdgeLength), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x - 0, position.y + Constants.GroupTotalEdgeLength), out otherIsAlive) && otherIsAlive ||
+                    ActiveGroups.TryGetValue(new int2(position.x + Constants.GroupTotalEdgeLength, position.y + Constants.GroupTotalEdgeLength), out otherIsAlive) && otherIsAlive;
 
                 if (!alive)
                 {
