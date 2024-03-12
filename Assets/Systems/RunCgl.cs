@@ -1,4 +1,3 @@
-using System;
 using NativeQuadTree;
 using Unity.Burst;
 using Unity.Burst.Intrinsics;
