@@ -70,6 +70,8 @@ public partial struct RunCgl : ISystem
             ActiveGroups = activeGroups.AsParallelWriter(),
         }.ScheduleParallel(groupsQuery, state.Dependency);
 
+        if (calcMode.SimulateStill) return;
+
         var toCreate = new NativeParallelHashSet<int2>(groups.Length * 8, state.WorldUpdateAllocator);
         var toDestroy = new NativeParallelHashSet<Entity>(groups.Length, state.WorldUpdateAllocator);
         state.Dependency = JobHandle.CombineDependencies(

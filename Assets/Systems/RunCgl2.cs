@@ -29,7 +29,6 @@ namespace Systems
             var calcMode = SystemAPI.GetSingleton<CalcMode>();
             if (calcMode.Algorithm != Algorithm.HashMap) return;
 
-
             var groupQuery = SystemAPI.QueryBuilder().WithAll<GroupPosition, CurrentCglGroup>().WithAllRW<NextCglGroup>().Build();
 
             var groups = new NativeHashMap<int2, Entity>(groupQuery.CalculateEntityCount(), state.WorldUpdateAllocator);
@@ -51,7 +50,7 @@ namespace Systems
                 TopCentOffset = new int2(0, -Constants.GroupTotalEdgeLength),
                 TopRighOffset = new int2(+Constants.GroupTotalEdgeLength, -Constants.GroupTotalEdgeLength),
                 MidLeftOffset = new int2(-Constants.GroupTotalEdgeLength, 0),
-                MidCentOffset = new int2(0, 0),
+                // MidCentOffset = new int2(0, 0),
                 MidRighOffset = new int2(+Constants.GroupTotalEdgeLength, 0),
                 BotLeftOffset = new int2(-Constants.GroupTotalEdgeLength, +Constants.GroupTotalEdgeLength),
                 BotCentOffset = new int2(0, +Constants.GroupTotalEdgeLength),
@@ -77,7 +76,7 @@ namespace Systems
             public int2 TopCentOffset;
             public int2 TopRighOffset;
             public int2 MidLeftOffset;
-            public int2 MidCentOffset;
+            // public int2 MidCentOffset;
             public int2 MidRighOffset;
             public int2 BotLeftOffset;
             public int2 BotCentOffset;
@@ -90,7 +89,7 @@ namespace Systems
             [ReadOnly] public NativeHashMap<int2, Entity> Groups;
             [ReadOnly] public ComponentLookup<CurrentCglGroup> CurrentLookup;
 
-            public unsafe void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 Assert.IsFalse(useEnabledMask);
 
@@ -100,6 +99,13 @@ namespace Systems
 
                 // NB! One row uses 16 bits from 4 sequential SubGroups
                 var neighbors = new NativeArray<byte>(Constants.GroupTotalArea + PrePaddingBytes + PostPaddingBytes, Allocator.Temp);
+
+                // bit pattern
+                var precalculated = new NativeArray<ulong>(16, Allocator.Temp);
+                for (var i = 0; i < 16; i++)
+                {
+                    precalculated[i] = (i is 0b1011 or 0b1100 or 0b0011) ? (ulong)1 : (ulong)0;
+                }
 
                 for (var i = 0; i < chunk.Count; i++)
                 {
@@ -188,6 +194,127 @@ namespace Systems
                     }
 
                     #endregion
+
+                    #region LeftRightEdges
+
+                    {
+                        if (Groups.TryGetValue(position + MidLeftOffset, out var currentNeighborEntity))
+                        {
+                            var currentNeighbor = CurrentLookup[currentNeighborEntity];
+
+                            // Oof, slow?
+                            for (byte subgroup = 0; subgroup < Constants.GroupSize; subgroup++)
+                            {
+                                ulong value;
+                                unsafe
+                                {
+                                    value = ((ulong*)&currentNeighbor)[(subgroup + 1) * Constants.GroupSize - 1];
+                                }
+
+                                for (byte y = 0; y < 8; y++)
+                                {
+                                    neighbors[PosToBitIndex(0, (subgroup + 1) * Constants.BitFieldSize - y - 1)] += (byte)((value >> (y * 8)) & 1);
+                                }
+                            }
+                        }
+                    }
+
+                    {
+                        if (Groups.TryGetValue(position + MidRighOffset, out var currentNeighborEntity))
+                        {
+                            var currentNeighbor = CurrentLookup[currentNeighborEntity];
+
+                            for (byte subgroup = 0; subgroup < Constants.GroupSize; subgroup++)
+                            {
+                                ulong value;
+                                unsafe
+                                {
+                                    value = ((ulong*)&currentNeighbor)[subgroup * Constants.GroupSize];
+                                }
+
+                                for (byte y = 0; y < 8; y++)
+                                {
+                                    neighbors[PosToBitIndex(Constants.BitFieldSize - 1, (subgroup + 1) * Constants.BitFieldSize - y - 1)] += (byte)((value >> (y * 8 + 7)) & 1);
+                                }
+                            }
+                        }
+                    }
+
+                    #endregion
+
+                    {
+                        var current = currentGroups[i];
+                        for (var y = 0; y < Constants.GroupSize; y++)
+                        {
+                            for (var x = 0; x < Constants.GroupSize; x++)
+                            {
+                                ulong currentBitmask;
+                                unsafe
+                                {
+                                    currentBitmask = ((ulong*)&current)[y * Constants.GroupSize + x];
+                                }
+
+                                for (var by = 0; by < Constants.BitFieldSize && currentBitmask > 0; by++)
+                                {
+                                    for (var bx = 0; bx < Constants.BitFieldSize; bx++)
+                                    {
+                                        var value = currentBitmask & 1;
+                                        var aliveFlag = (byte)(currentBitmask << 3);
+                                        var addVal = (byte)value;
+
+                                        var index = PosToBitIndex(x * Constants.BitFieldSize + bx, y * Constants.BitFieldSize + by);
+                                        neighbors[index] += aliveFlag;
+
+                                        neighbors[index - 1] += addVal;
+                                        neighbors[index + 1] += addVal;
+                                        if (y + by > 0)
+                                        {
+                                            neighbors[index - Constants.GroupTotalEdgeLength - 1] += addVal;
+                                            neighbors[index - Constants.GroupTotalEdgeLength - 0] += addVal;
+                                            neighbors[index - Constants.GroupTotalEdgeLength + 1] += addVal;
+                                        }
+
+                                        if (y != Constants.GroupSize - 1 && bx != Constants.BitFieldSize - 1)
+                                        {
+                                            neighbors[index + Constants.GroupTotalEdgeLength - 1] += addVal;
+                                            neighbors[index + Constants.GroupTotalEdgeLength - 0] += addVal;
+                                            neighbors[index + Constants.GroupTotalEdgeLength + 1] += addVal;
+                                        }
+
+                                        currentBitmask >>= 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    {
+                        var next = new NextCglGroup();
+                        for (var y = 0; y < Constants.GroupSize; y++)
+                        {
+                            for (var x = 0; x < Constants.GroupSize; x++)
+                            {
+                                var nextBitmask = (ulong)0;
+                                for (var by = 0; by < Constants.BitFieldSize; by++)
+                                {
+                                    for (var bx = 0; bx < Constants.BitFieldSize; bx++)
+                                    {
+                                        nextBitmask <<= 1;
+                                        var index = PosToBitIndex(x * Constants.BitFieldSize + bx, y * Constants.BitFieldSize + by);
+                                        nextBitmask |= precalculated[neighbors[index] & 0b1111];
+                                        neighbors[index] = 0;
+                                    }
+                                }
+
+                                unsafe
+                                {
+                                    ((ulong*)&next)[y * Constants.GroupSize + x] = nextBitmask;
+                                }
+                            }
+                        }
+
+                        nextGroups[i] = next;
+                    }
                 }
             }
 
@@ -201,7 +328,8 @@ namespace Systems
                 // The inner ones are easy since it's always [x][n][n+1][n+2], so we need the bytes 0,1,1,1
                 // Final one is tricky again and becomes [^2][^1][x][x] 
 
-                //                  000000001111111122222222
+                // NB: Assumes small endian!
+                //                  33333333222222221111111100000000
                 const uint addR = 0b00000001000000010000000100000000;
                 const uint addF = 0b00000001000000010000000000000000;
                 const uint addL = 0b00000000000000010000000100000000;
@@ -220,20 +348,21 @@ namespace Systems
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private int PosToBitIndex(byte x, byte y)
+            private int PosToBitIndex(int x, int y)
             {
+                ThrowIfOutOfBounds(x, y);
                 return y * Constants.GroupTotalEdgeLength + x + PrePaddingBytes;
             }
 
             [BurstDiscard]
-            private void ThrowIfOutOfBounds(byte x, byte y)
+            private void ThrowIfOutOfBounds(int x, int y)
             {
-                if (x > Constants.GroupTotalEdgeLength)
+                if (x is < 0 or >= Constants.GroupTotalEdgeLength)
                 {
                     throw new ArgumentException($"x in {x},{y} is out of range 0->{Constants.GroupTotalEdgeLength}", nameof(x));
                 }
 
-                if (y > Constants.GroupTotalEdgeLength)
+                if (y is < 0 or >= Constants.GroupTotalEdgeLength)
                 {
                     throw new ArgumentException($"y in {x},{y} is out of range 0->{Constants.GroupTotalEdgeLength}", nameof(y));
                 }

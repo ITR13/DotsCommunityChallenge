@@ -1,4 +1,5 @@
 using Unity.Entities;
+using UnityEngine;
 
 public partial struct ModeSwapperSystem : ISystem
 {
@@ -8,7 +9,18 @@ public partial struct ModeSwapperSystem : ISystem
             new CalcMode
             {
                 Algorithm = Algorithm.HashMap,
+                SimulateStill = true,
+                Render = false,
             }
         );
+    }
+
+    public void OnUpdate(ref SystemState state)
+    {
+        var singleton = SystemAPI.GetSingletonRW<CalcMode>();
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            singleton.ValueRW.Algorithm = (Algorithm)(((int)singleton.ValueRW.Algorithm + 1) % 2);
+        }
     }
 }
