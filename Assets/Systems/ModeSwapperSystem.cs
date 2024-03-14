@@ -9,8 +9,8 @@ public partial struct ModeSwapperSystem : ISystem
             new CalcMode
             {
                 Algorithm = Algorithm.HashMap,
-                SimulateStill = true,
-                Render = false,
+                SimulateStill = false,
+                Render = true,
             }
         );
     }
