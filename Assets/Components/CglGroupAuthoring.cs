@@ -1,3 +1,4 @@
+using System;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -6,12 +7,17 @@ public class CglGroupAuthoring : MonoBehaviour
 {
     public enum Spawnable
     {
-        None = 0,
-        Blink = 1,
-        Box = 2,
-        Glider = 3,
-        TinyBox = 4,
-        BigBlock = 5,
+        None,
+        Blink,
+        Box,
+        Glider,
+        TinyBox,
+        BigBlock,
+        LeftBlock,
+        RightBlock,
+        TopBlock,
+        BotBlock,
+        TopLeftBlock,
     }
 
     public Spawnable WhatToSpawn;
@@ -28,15 +34,24 @@ public class CglGroupAuthoring : MonoBehaviour
             const ulong glider = 0b000000010000010100000011000000000;
             const ulong tinybox = 771;
             const ulong bigblock = ~(ulong)0;
+            const ulong leftblock = 0b1111000011110000111100001111000011110000111100001111000011110000;
+            const ulong rightblock = ~leftblock;
+            const ulong topblock = 0b1111111111111111111111111111111100000000000000000000000000000000;
+            const ulong botblock = ~topblock;
+            const ulong topleftblock = 0b1111000011110000111100001111000000000000000000000000000000000000;
 
             var current = authoring.WhatToSpawn switch
             {
-                Spawnable.None => (ulong)0,
                 Spawnable.Blink => blink,
                 Spawnable.Box => box,
                 Spawnable.Glider => glider,
                 Spawnable.TinyBox => tinybox,
                 Spawnable.BigBlock => bigblock,
+                Spawnable.LeftBlock => leftblock,
+                Spawnable.RightBlock => rightblock,
+                Spawnable.TopBlock => topblock,
+                Spawnable.BotBlock => botblock,
+                Spawnable.TopLeftBlock => topleftblock,
                 _ => (ulong)0,
             };
 

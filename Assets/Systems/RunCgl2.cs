@@ -1,3 +1,5 @@
+#define DEBUGGER_FIX
+
 using System;
 using System.Runtime.CompilerServices;
 using Unity.Burst;
@@ -6,13 +8,13 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
+using UnityEngine;
 using UnityEngine.Assertions;
 
 public partial struct RunCgl2 : ISystem
 {
-    private const byte PrePaddingBytes = 2;
-    private const byte PostPaddingBytes = 2;
-
+    private const int RowPadding = 1, ColumnPadding = 1;
+    private const int ArrayWidth = ColumnPadding * 2 + Constants.GroupTotalEdgeLength;
 
     public void OnCreate(ref SystemState state)
     {
@@ -34,7 +36,7 @@ public partial struct RunCgl2 : ISystem
             Groups = groups,
         }.Schedule(state.Dependency);
 
-        state.Dependency = new UpdateGroup
+        var updateGroup = new UpdateGroup
         {
             PositionTypeHandle = SystemAPI.GetComponentTypeHandle<GroupPosition>(true),
             CurrentTypeHandle = SystemAPI.GetComponentTypeHandle<CurrentCglGroup>(true),
@@ -51,7 +53,13 @@ public partial struct RunCgl2 : ISystem
             BotLeftOffset = new int2(-Constants.GroupTotalEdgeLength, +Constants.GroupTotalEdgeLength),
             BotCentOffset = new int2(0, +Constants.GroupTotalEdgeLength),
             BotRighOffset = new int2(+Constants.GroupTotalEdgeLength, +Constants.GroupTotalEdgeLength),
-        }.ScheduleParallel(groupQuery, state.Dependency);
+        };
+#if DEBUGGER_FIX
+        state.Dependency.Complete();
+        updateGroup.Run(groupQuery);
+#else
+        state.Dependency = updateGroup.ScheduleParallel(groupQuery, state.Dependency);
+#endif
 
         if (!calcMode.SimulateStill)
         {
@@ -100,14 +108,14 @@ public partial struct RunCgl2 : ISystem
             var nextGroups = chunk.GetNativeArray(ref NextTypeHandle);
             var positions = chunk.GetNativeArray(ref PositionTypeHandle);
 
-            // NB! One row uses 16 bits from 4 sequential SubGroups
-            var neighbors = new NativeArray<byte>(Constants.GroupTotalArea + PrePaddingBytes + PostPaddingBytes, Allocator.Temp);
+            // NB! One row uses 8 bits from each of the 4 sequential SubGroups
+            var neighbors = new NativeArray<byte>(ArrayWidth * (Constants.GroupTotalEdgeLength + ColumnPadding * 2), Allocator.Temp);
 
             // bit pattern
             var precalculated = new NativeArray<ulong>(16, Allocator.Temp);
             for (var i = 0; i < 16; i++)
             {
-                precalculated[i] = (i is 0b1011 or 0b1100 or 0b0011) ? 1 : (ulong)0;
+                precalculated[i] = (i is 0b1010 or 0b1011 or 0b0011) ? 1 : (ulong)0;
             }
 
             for (var i = 0; i < chunk.Count; i++)
@@ -120,7 +128,7 @@ public partial struct RunCgl2 : ISystem
                     if (Groups.TryGetValue(position + TopLeftOffset, out var currentNeighborEntity))
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        neighbors[PosToBitIndex(0, 0)] = (byte)((currentNeighbor.Data.Alive15 >> 0x3F) & 1);
+                        neighbors[PosToBitIndex(0, 0, 0, 0)] = (byte)((currentNeighbor.Data.Alive15 >> 0x3F) & 1);
                     }
                 }
 
@@ -128,7 +136,7 @@ public partial struct RunCgl2 : ISystem
                     if (Groups.TryGetValue(position + TopRighOffset, out var currentNeighborEntity))
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        neighbors[PosToBitIndex(Constants.GroupTotalEdgeLength - 1, 0)] = (byte)((currentNeighbor.Data.Alive12 >> 0x38) & 1);
+                        neighbors[PosToBitIndex(3, 0, 7, 0)] = (byte)((currentNeighbor.Data.Alive12 >> 0x38) & 1);
                     }
                 }
 
@@ -136,7 +144,7 @@ public partial struct RunCgl2 : ISystem
                     if (Groups.TryGetValue(position + BotLeftOffset, out var currentNeighborEntity))
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        neighbors[PosToBitIndex(0, Constants.GroupTotalEdgeLength - 1)] = (byte)((currentNeighbor.Data.Alive3 >> 0x07) & 1);
+                        neighbors[PosToBitIndex(0, 3, 0, 7)] = (byte)((currentNeighbor.Data.Alive3 >> 0x07) & 1);
                     }
                 }
 
@@ -144,7 +152,7 @@ public partial struct RunCgl2 : ISystem
                     if (Groups.TryGetValue(position + BotRighOffset, out var currentNeighborEntity))
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        neighbors[PosToBitIndex(Constants.GroupTotalEdgeLength - 1, Constants.GroupTotalEdgeLength - 1)] = (byte)(currentNeighbor.Data.Alive0 & 1);
+                        neighbors[PosToBitIndex(3, 3, 7, 7)] = (byte)(currentNeighbor.Data.Alive0 & 1);
                     }
                 }
 
@@ -168,7 +176,7 @@ public partial struct RunCgl2 : ISystem
                         unsafe
                         {
                             // We start this two before 0,0 for ease of use
-                            var ptr = (byte*)neighbors.GetUnsafePtr(); /* + PosToBitIndex(0, 0) - 2 */ // +2-2 = 0;
+                            var ptr = (byte*)neighbors.GetUnsafePtr() + PosToBitIndex(0, 0, 0, 0) - 2;
                             PopulateCenterEdgeNeigbors(topEdge, ptr);
                         }
                     }
@@ -190,7 +198,7 @@ public partial struct RunCgl2 : ISystem
                         unsafe
                         {
                             // We start this two before [max-1],0 for ease of use
-                            var ptr = ((byte*)neighbors.GetUnsafePtr()) + PosToBitIndex(0, Constants.GroupTotalEdgeLength - 1) - 2;
+                            var ptr = ((byte*)neighbors.GetUnsafePtr()) + PosToBitIndex(0, 3, 0, 7) - 2;
                             PopulateCenterEdgeNeigbors(bottomEdge, ptr);
                         }
                     }
@@ -214,9 +222,15 @@ public partial struct RunCgl2 : ISystem
                                 value = ((ulong*)&currentNeighbor)[(subgroup + 1) * Constants.GroupSize - 1];
                             }
 
-                            for (byte y = 0; y < 8; y++)
+                            if (value == 0) continue;
+
+                            for (byte by = 0; by < 8; by++)
                             {
-                                neighbors[PosToBitIndex(0, (subgroup + 1) * Constants.BitFieldSize - y - 1)] += (byte)((value >> (y * 8)) & 1);
+                                var index = PosToBitIndex(0, subgroup, 0, by);
+                                var isAlive = (byte)((value >> (by * 8 + 7)) & 1);
+                                neighbors[index] += isAlive;
+                                neighbors[index - ArrayWidth] += isAlive;
+                                neighbors[index + ArrayWidth] += isAlive;
                             }
                         }
                     }
@@ -235,9 +249,15 @@ public partial struct RunCgl2 : ISystem
                                 value = ((ulong*)&currentNeighbor)[subgroup * Constants.GroupSize];
                             }
 
-                            for (byte y = 0; y < 8; y++)
+                            if (value == 0) continue;
+                            
+                            for (byte by = 0; by < 8; by++)
                             {
-                                neighbors[PosToBitIndex(Constants.BitFieldSize - 1, (subgroup + 1) * Constants.BitFieldSize - y - 1)] += (byte)((value >> (y * 8 + 7)) & 1);
+                                var index = PosToBitIndex(3, subgroup, 7, by);
+                                var isAlive = (byte)((value >> (by * 8)) & 1);
+                                neighbors[index] += isAlive;
+                                neighbors[index - ArrayWidth] += isAlive;
+                                neighbors[index + ArrayWidth] += isAlive;
                             }
                         }
                     }
@@ -265,24 +285,19 @@ public partial struct RunCgl2 : ISystem
                                     var aliveFlag = (byte)(currentBitmask << 3);
                                     var addVal = (byte)value;
 
-                                    var index = PosToBitIndex(x * Constants.BitFieldSize + bx, y * Constants.BitFieldSize + by);
-                                    neighbors[index] += aliveFlag;
+                                    var index = PosToBitIndex(x, y, bx, by);
 
+                                    neighbors[index] += aliveFlag;
                                     neighbors[index - 1] += addVal;
                                     neighbors[index + 1] += addVal;
-                                    if (y + by > 0)
-                                    {
-                                        neighbors[index - Constants.GroupTotalEdgeLength - 1] += addVal;
-                                        neighbors[index - Constants.GroupTotalEdgeLength - 0] += addVal;
-                                        neighbors[index - Constants.GroupTotalEdgeLength + 1] += addVal;
-                                    }
 
-                                    if (y != Constants.GroupSize - 1 && bx != Constants.BitFieldSize - 1)
-                                    {
-                                        neighbors[index + Constants.GroupTotalEdgeLength - 1] += addVal;
-                                        neighbors[index + Constants.GroupTotalEdgeLength - 0] += addVal;
-                                        neighbors[index + Constants.GroupTotalEdgeLength + 1] += addVal;
-                                    }
+                                    neighbors[index - ArrayWidth - 1] += addVal;
+                                    neighbors[index - ArrayWidth - 0] += addVal;
+                                    neighbors[index - ArrayWidth + 1] += addVal;
+
+                                    neighbors[index + ArrayWidth - 1] += addVal;
+                                    neighbors[index + ArrayWidth - 0] += addVal;
+                                    neighbors[index + ArrayWidth + 1] += addVal;
 
                                     currentBitmask >>= 1;
                                 }
@@ -298,12 +313,12 @@ public partial struct RunCgl2 : ISystem
                         for (var x = 0; x < Constants.GroupSize; x++)
                         {
                             var nextBitmask = (ulong)0;
-                            for (var by = 0; by < Constants.BitFieldSize; by++)
+                            for (var by = Constants.BitFieldSize - 1; by >= 0; by--)
                             {
-                                for (var bx = 0; bx < Constants.BitFieldSize; bx++)
+                                for (var bx = Constants.BitFieldSize - 1; bx >= 0; bx--)
                                 {
                                     nextBitmask <<= 1;
-                                    var index = PosToBitIndex(x * Constants.BitFieldSize + bx, y * Constants.BitFieldSize + by);
+                                    var index = PosToBitIndex(x, y, bx, by);
                                     nextBitmask |= precalculated[neighbors[index] & 0b1111];
                                     neighbors[index] = 0;
                                 }
@@ -351,23 +366,34 @@ public partial struct RunCgl2 : ISystem
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int PosToBitIndex(int x, int y)
+        private int PosToBitIndex(int x, int y, int bx, int by)
         {
-            ThrowIfOutOfBounds(x, y);
-            return y * Constants.GroupTotalEdgeLength + x + PrePaddingBytes;
+            ThrowIfOutOfBounds(x, y, bx, by);
+            return (y * Constants.BitFieldSize + by + ColumnPadding) * ArrayWidth +
+                   x * Constants.BitFieldSize + bx + RowPadding;
         }
 
         [BurstDiscard]
-        private void ThrowIfOutOfBounds(int x, int y)
+        private void ThrowIfOutOfBounds(int x, int y, int bx, int by)
         {
-            if (x is < 0 or >= Constants.GroupTotalEdgeLength)
+            if (x is < 0 or >= Constants.GroupSize)
             {
-                throw new ArgumentException($"x in {x},{y} is out of range 0->{Constants.GroupTotalEdgeLength}", nameof(x));
+                throw new ArgumentException($"x in {x},{y} - {bx},{by} is out of range 0->{Constants.GroupSize}", nameof(x));
             }
 
-            if (y is < 0 or >= Constants.GroupTotalEdgeLength)
+            if (y is < 0 or >= Constants.GroupSize)
             {
-                throw new ArgumentException($"y in {x},{y} is out of range 0->{Constants.GroupTotalEdgeLength}", nameof(y));
+                throw new ArgumentException($"y in {x},{y} - {bx},{by} is out of range 0->{Constants.GroupSize}", nameof(y));
+            }
+
+            if (bx is < 0 or >= Constants.BitFieldSize)
+            {
+                throw new ArgumentException($"bx in {x},{y} - {bx},{by} is out of range 0->{Constants.BitFieldSize}", nameof(x));
+            }
+
+            if (by is < 0 or >= Constants.BitFieldSize)
+            {
+                throw new ArgumentException($"by in {x},{y} - {bx},{by} is out of range 0->{Constants.BitFieldSize}", nameof(y));
             }
         }
     }
