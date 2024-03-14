@@ -23,8 +23,8 @@ public partial class UpdateRenderData : SystemBase
         BufferProperty = Shader.PropertyToID("_buffer");
         LengthProperty = Shader.PropertyToID("_length");
 
-        VisualizedGroups = new NativeArray<CglGroupData>(4, Allocator.Persistent);
-        ComputeBuffer = new ComputeBuffer(Constants.GroupTotalArea / 8, 4);
+        VisualizedGroups = new NativeArray<CglGroupData>(9, Allocator.Persistent);
+        ComputeBuffer = new ComputeBuffer(9 * Constants.GroupTotalArea / (8 * 4), 4);
     }
 
     protected override void OnDestroy()
@@ -39,10 +39,10 @@ public partial class UpdateRenderData : SystemBase
 
         var visualizer = SystemAPI.QueryBuilder().WithAllRW<Visualizer>().Build().GetSingletonRW<Visualizer>();
 
-        VisualizedGroups[0] = default;
-        VisualizedGroups[1] = default;
-        VisualizedGroups[2] = default;
-        VisualizedGroups[3] = default;
+        for (var i = 0; i < 9; i++)
+        {
+            VisualizedGroups[i] = default;
+        }
 
         Dependency = new FindRenderData
         {
@@ -72,7 +72,7 @@ public partial class UpdateRenderData : SystemBase
         private void Execute(in CurrentCglGroup currentCglGroup, in GroupPosition position)
         {
             var groupSimplePosition = position.Position / Constants.GroupTotalEdgeLength;
-            var viewSimplePosition = (int2)math.floor(Position / Constants.GroupTotalEdgeLength - 0.5f);
+            var viewSimplePosition = (int2)math.floor(Position / Constants.GroupTotalEdgeLength - 1f);
 
             if (groupSimplePosition.x == viewSimplePosition.x)
             {
@@ -82,7 +82,11 @@ public partial class UpdateRenderData : SystemBase
                 }
                 else if (groupSimplePosition.y == viewSimplePosition.y + 1)
                 {
-                    Groups[2] = currentCglGroup.Data;
+                    Groups[3] = currentCglGroup.Data;
+                }
+                else if (groupSimplePosition.y == viewSimplePosition.y + 2)
+                {
+                    Groups[6] = currentCglGroup.Data;
                 }
             }
             else if (groupSimplePosition.x == viewSimplePosition.x + 1)
@@ -93,7 +97,26 @@ public partial class UpdateRenderData : SystemBase
                 }
                 else if (groupSimplePosition.y == viewSimplePosition.y + 1)
                 {
-                    Groups[3] = currentCglGroup.Data;
+                    Groups[4] = currentCglGroup.Data;
+                }
+                else if (groupSimplePosition.y == viewSimplePosition.y + 2)
+                {
+                    Groups[7] = currentCglGroup.Data;
+                }
+            }
+            else if (groupSimplePosition.x == viewSimplePosition.x + 2)
+            {
+                if (groupSimplePosition.y == viewSimplePosition.y)
+                {
+                    Groups[2] = currentCglGroup.Data;
+                }
+                else if (groupSimplePosition.y == viewSimplePosition.y + 1)
+                {
+                    Groups[5] = currentCglGroup.Data;
+                }
+                else if (groupSimplePosition.y == viewSimplePosition.y + 2)
+                {
+                    Groups[8] = currentCglGroup.Data;
                 }
             }
         }
