@@ -5,7 +5,6 @@ using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
-using Unity.Jobs.LowLevel.Unsafe;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
 
@@ -39,7 +38,7 @@ public partial struct RunCgl2 : ISystem
         {
             PositionTypeHandle = SystemAPI.GetComponentTypeHandle<GroupPosition>(true),
             CurrentTypeHandle = SystemAPI.GetComponentTypeHandle<CurrentCglGroup>(true),
-            NextTypeHandle = SystemAPI.GetComponentTypeHandle<NextCglGroup>(false),
+            NextTypeHandle = SystemAPI.GetComponentTypeHandle<NextCglGroup>(),
             Groups = groups,
             CurrentLookup = SystemAPI.GetComponentLookup<CurrentCglGroup>(true),
 
@@ -72,7 +71,7 @@ public partial struct RunCgl2 : ISystem
     }
 
     [BurstCompile]
-    public partial struct UpdateGroup : IJobChunk
+    private struct UpdateGroup : IJobChunk
     {
         public int2 TopLeftOffset;
         public int2 TopCentOffset;
@@ -108,7 +107,7 @@ public partial struct RunCgl2 : ISystem
             var precalculated = new NativeArray<ulong>(16, Allocator.Temp);
             for (var i = 0; i < 16; i++)
             {
-                precalculated[i] = (i is 0b1011 or 0b1100 or 0b0011) ? (ulong)1 : (ulong)0;
+                precalculated[i] = (i is 0b1011 or 0b1100 or 0b0011) ? 1 : (ulong)0;
             }
 
             for (var i = 0; i < chunk.Count; i++)
