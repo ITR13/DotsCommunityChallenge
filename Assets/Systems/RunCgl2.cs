@@ -7,18 +7,22 @@ using Unity.Burst.Intrinsics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEngine;
 using UnityEngine.Assertions;
 
 public partial struct RunCgl2 : ISystem
 {
     private const int RowPadding = 1, ColumnPadding = 1;
     private const int ArrayWidth = ColumnPadding * 2 + Constants.GroupTotalEdgeLength;
+    private EntityArchetype _groupArchetype;
 
     public void OnCreate(ref SystemState state)
     {
+        state.RequireForUpdate<NextCglGroup>();
         state.RequireForUpdate<CalcMode>();
+
+        _groupArchetype = state.EntityManager.CreateArchetype(typeof(GroupPosition), typeof(CurrentCglGroup), typeof(NextCglGroup));
     }
 
     [BurstCompile]
@@ -29,7 +33,9 @@ public partial struct RunCgl2 : ISystem
 
         var groupQuery = SystemAPI.QueryBuilder().WithAll<GroupPosition, CurrentCglGroup>().WithAllRW<NextCglGroup>().Build();
 
-        var groups = new NativeHashMap<int2, Entity>(groupQuery.CalculateEntityCount(), state.WorldUpdateAllocator);
+        var groupCount = groupQuery.CalculateEntityCount();
+        var groups = new NativeHashMap<int2, Entity>(groupCount, state.WorldUpdateAllocator);
+        var activeGroups = new NativeParallelHashMap<int2, bool>(groupCount, state.WorldUpdateAllocator);
 
         state.Dependency = new PopulateGroupHashmapJob
         {
@@ -53,6 +59,8 @@ public partial struct RunCgl2 : ISystem
             BotLeftOffset = new int2(-Constants.GroupTotalEdgeLength, +Constants.GroupTotalEdgeLength),
             BotCentOffset = new int2(0, +Constants.GroupTotalEdgeLength),
             BotRighOffset = new int2(+Constants.GroupTotalEdgeLength, +Constants.GroupTotalEdgeLength),
+
+            ActiveGroups = activeGroups,
         };
 #if DEBUGGER_FIX
         state.Dependency.Complete();
@@ -61,9 +69,30 @@ public partial struct RunCgl2 : ISystem
         state.Dependency = updateGroup.ScheduleParallel(groupQuery, state.Dependency);
 #endif
 
-        if (!calcMode.SimulateStill)
+        if (calcMode.SimulateStill) return;
+
+        var toCreate = new NativeParallelHashSet<int2>(groupCount * 8, state.WorldUpdateAllocator);
+        var toDestroy = new NativeParallelHashSet<Entity>(groupCount, state.WorldUpdateAllocator);
+        state.Dependency = JobHandle.CombineDependencies(
+            new RunCgl.CollectStructuralChanges
+            {
+                ActiveGroups = activeGroups.AsReadOnly(),
+                ToCreate = toCreate.AsParallelWriter(),
+                ToDestroy = toDestroy.AsParallelWriter(),
+            }.ScheduleParallel(state.Dependency),
+            new RunCgl.SwapBuffersJob().ScheduleParallel(state.Dependency)
+        );
+
+        state.Dependency.Complete();
+        state.EntityManager.DestroyEntity(toDestroy.ToNativeArray(Allocator.Temp));
+
+        if (toCreate.IsEmpty) return;
+
+        var toCreateArray = toCreate.ToNativeArray(Allocator.Temp);
+        var entities = state.EntityManager.CreateEntity(_groupArchetype, toCreateArray.Length, Allocator.Temp);
+        for (var i = 0; i < toCreateArray.Length; i++)
         {
-            state.Dependency = new RunCgl.SwapBuffersJob().ScheduleParallel(state.Dependency);
+            state.EntityManager.SetComponentData(entities[i], new GroupPosition {Position = toCreateArray[i]});
         }
     }
 
@@ -81,17 +110,17 @@ public partial struct RunCgl2 : ISystem
     [BurstCompile]
     private struct UpdateGroup : IJobChunk
     {
-        public int2 TopLeftOffset;
-        public int2 TopCentOffset;
-        public int2 TopRighOffset;
+        [ReadOnly] public int2 TopLeftOffset;
+        [ReadOnly] public int2 TopCentOffset;
+        [ReadOnly] public int2 TopRighOffset;
 
-        public int2 MidLeftOffset;
+        [ReadOnly] public int2 MidLeftOffset;
 
-        // public int2 MidCentOffset;
-        public int2 MidRighOffset;
-        public int2 BotLeftOffset;
-        public int2 BotCentOffset;
-        public int2 BotRighOffset;
+        // [ReadOnly] public int2 MidCentOffset;
+        [ReadOnly] public int2 MidRighOffset;
+        [ReadOnly] public int2 BotLeftOffset;
+        [ReadOnly] public int2 BotCentOffset;
+        [ReadOnly] public int2 BotRighOffset;
 
         [ReadOnly] public ComponentTypeHandle<CurrentCglGroup> CurrentTypeHandle;
         [ReadOnly] public ComponentTypeHandle<GroupPosition> PositionTypeHandle;
@@ -99,6 +128,8 @@ public partial struct RunCgl2 : ISystem
 
         [ReadOnly] public NativeHashMap<int2, Entity> Groups;
         [ReadOnly] public ComponentLookup<CurrentCglGroup> CurrentLookup;
+
+        public NativeParallelHashMap<int2, bool> ActiveGroups;
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
@@ -121,6 +152,7 @@ public partial struct RunCgl2 : ISystem
             for (var i = 0; i < chunk.Count; i++)
             {
                 var position = positions[i].Position;
+                var hasAny = false;
 
                 #region Courners
 
@@ -128,7 +160,9 @@ public partial struct RunCgl2 : ISystem
                     if (Groups.TryGetValue(position + TopLeftOffset, out var currentNeighborEntity))
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        neighbors[PosToBitIndex(0, 0, 0, 0)] = (byte)((currentNeighbor.Data.Alive15 >> 0x3F) & 1);
+                        var isAlive = (byte)((currentNeighbor.Data.Alive15 >> 0x3F) & 1);
+                        neighbors[PosToBitIndex(0, 0, 0, 0)] = isAlive;
+                        hasAny |= isAlive != 0;
                     }
                 }
 
@@ -136,7 +170,9 @@ public partial struct RunCgl2 : ISystem
                     if (Groups.TryGetValue(position + TopRighOffset, out var currentNeighborEntity))
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        neighbors[PosToBitIndex(3, 0, 7, 0)] = (byte)((currentNeighbor.Data.Alive12 >> 0x38) & 1);
+                        var isAlive = (byte)((currentNeighbor.Data.Alive12 >> 0x38) & 1);
+                        neighbors[PosToBitIndex(3, 0, 7, 0)] = isAlive;
+                        hasAny |= isAlive != 0;
                     }
                 }
 
@@ -144,7 +180,9 @@ public partial struct RunCgl2 : ISystem
                     if (Groups.TryGetValue(position + BotLeftOffset, out var currentNeighborEntity))
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        neighbors[PosToBitIndex(0, 3, 0, 7)] = (byte)((currentNeighbor.Data.Alive3 >> 0x07) & 1);
+                        var isAlive = (byte)((currentNeighbor.Data.Alive3 >> 0x07) & 1);
+                        neighbors[PosToBitIndex(0, 3, 0, 7)] = isAlive;
+                        hasAny |= isAlive != 0;
                     }
                 }
 
@@ -152,7 +190,9 @@ public partial struct RunCgl2 : ISystem
                     if (Groups.TryGetValue(position + BotRighOffset, out var currentNeighborEntity))
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        neighbors[PosToBitIndex(3, 3, 7, 7)] = (byte)(currentNeighbor.Data.Alive0 & 1);
+                        var isAlive = (byte)(currentNeighbor.Data.Alive0 & 1);
+                        neighbors[PosToBitIndex(3, 3, 7, 7)] = isAlive;
+                        hasAny |= isAlive != 0;
                     }
                 }
 
@@ -172,6 +212,8 @@ public partial struct RunCgl2 : ISystem
                                 (currentNeighbor.Data.Alive15 >> 0x20) & 0b11111111000000000000000000000000
                             )
                         );
+
+                        hasAny |= topEdge.Value != 0;
 
                         unsafe
                         {
@@ -194,6 +236,8 @@ public partial struct RunCgl2 : ISystem
                                 (currentNeighbor.Data.Alive3 << 0x18) & 0b11111111000000000000000000000000
                             )
                         );
+
+                        hasAny |= bottomEdge.Value != 0;
 
                         unsafe
                         {
@@ -223,6 +267,7 @@ public partial struct RunCgl2 : ISystem
                             }
 
                             if (value == 0) continue;
+                            hasAny = true;
 
                             for (byte by = 0; by < 8; by++)
                             {
@@ -250,7 +295,8 @@ public partial struct RunCgl2 : ISystem
                             }
 
                             if (value == 0) continue;
-                            
+                            hasAny = true;
+
                             for (byte by = 0; by < 8; by++)
                             {
                                 var index = PosToBitIndex(3, subgroup, 7, by);
@@ -276,6 +322,8 @@ public partial struct RunCgl2 : ISystem
                             {
                                 currentBitmask = ((ulong*)&current)[y * Constants.GroupSize + x];
                             }
+
+                            hasAny |= currentBitmask != 0;
 
                             for (var by = 0; by < Constants.BitFieldSize && currentBitmask > 0; by++)
                             {
@@ -305,6 +353,8 @@ public partial struct RunCgl2 : ISystem
                         }
                     }
                 }
+
+                ActiveGroups.TryAdd(position, hasAny);
 
                 {
                     var next = new NextCglGroup();

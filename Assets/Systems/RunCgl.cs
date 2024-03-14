@@ -11,20 +11,17 @@ using UnityEngine.Assertions;
 
 public partial struct RunCgl : ISystem
 {
-    private ComponentTypeHandle<GroupPosition> _positionTypeHandle;
-    private ComponentTypeHandle<CurrentCglGroup> _currentTypeHandle;
-    private ComponentTypeHandle<NextCglGroup> _nextTypeHandle;
+    private EntityArchetype _groupArchetype;
 
     public void OnCreate(ref SystemState state)
     {
         state.RequireForUpdate<NextCglGroup>();
         state.RequireForUpdate<CalcMode>();
 
-        _positionTypeHandle = state.GetComponentTypeHandle<GroupPosition>(true);
-        _currentTypeHandle = state.GetComponentTypeHandle<CurrentCglGroup>(true);
-        _nextTypeHandle = state.GetComponentTypeHandle<NextCglGroup>();
+        _groupArchetype = state.EntityManager.CreateArchetype(typeof(GroupPosition), typeof(CurrentCglGroup), typeof(NextCglGroup));
     }
 
+    [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
         var calcMode = SystemAPI.GetSingleton<CalcMode>();
@@ -40,15 +37,13 @@ public partial struct RunCgl : ISystem
         var positions = groupsQuery.ToComponentDataArray<GroupPosition>(state.WorldUpdateAllocator);
         var groupQuadTree = new NativeQuadTree<Entity>(allocator: state.WorldUpdateAllocator, initialElementsCapacity: groups.Length);
 
-        _positionTypeHandle.Update(ref state);
-        _currentTypeHandle.Update(ref state);
-        _nextTypeHandle.Update(ref state);
-
         var activeGroups = new NativeParallelHashMap<int2, bool>(groups.Length, state.WorldUpdateAllocator);
+
+        var groupPosition = SystemAPI.GetComponentTypeHandle<GroupPosition>(true);
 
         state.Dependency = new CalculateBoundsJob
         {
-            PositionTypeHandle = _positionTypeHandle,
+            PositionTypeHandle = groupPosition,
             Bounds = bounds,
         }.ScheduleParallel(groupsQuery, state.Dependency);
 
@@ -62,9 +57,9 @@ public partial struct RunCgl : ISystem
 
         state.Dependency = new RunCglJob
         {
-            PositionTypeHandle = _positionTypeHandle,
-            CurrentTypeHandle = _currentTypeHandle,
-            NextTypeHandle = _nextTypeHandle,
+            PositionTypeHandle = groupPosition,
+            CurrentTypeHandle = SystemAPI.GetComponentTypeHandle<CurrentCglGroup>(true),
+            NextTypeHandle = SystemAPI.GetComponentTypeHandle<NextCglGroup>(),
             CurrentLookup = SystemAPI.GetComponentLookup<CurrentCglGroup>(true),
             GroupQuadTree = groupQuadTree,
             ActiveGroups = activeGroups.AsParallelWriter(),
@@ -89,10 +84,11 @@ public partial struct RunCgl : ISystem
 
         if (toCreate.IsEmpty) return;
 
-        foreach (var pos in toCreate)
+        var toCreateArray = toCreate.ToNativeArray(Allocator.Temp);
+        var entities = state.EntityManager.CreateEntity(_groupArchetype, toCreateArray.Length, Allocator.Temp);
+        for (var i = 0; i < toCreateArray.Length; i++)
         {
-            var entity = state.EntityManager.CreateEntity(typeof(GroupPosition), typeof(CurrentCglGroup), typeof(NextCglGroup));
-            state.EntityManager.SetComponentData(entity, new GroupPosition {Position = pos});
+            state.EntityManager.SetComponentData(entities[i], new GroupPosition {Position = toCreateArray[i]});
         }
     }
 
