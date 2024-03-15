@@ -7,8 +7,8 @@ using UnityEngine;
 [UpdateAfter(typeof(RunCgl2))]
 public partial class UpdateRenderData : SystemBase
 {
-    private const int ShownSize = 1024 / Constants.GroupTotalEdgeLength;
-    private const int ShownArea = ShownSize * ShownSize;
+    private int _shownSize = 0;
+    private int _shownArea = 0;
 
     private NativeArray<CglGroupData> _visualizedGroups;
     private ComputeBuffer _computeBuffer;
@@ -32,8 +32,8 @@ public partial class UpdateRenderData : SystemBase
         _sizeProperty = Shader.PropertyToID("_size");
         _areaProperty = Shader.PropertyToID("_area");
 
-        _visualizedGroups = new NativeArray<CglGroupData>(ShownArea, Allocator.Persistent);
-        _computeBuffer = new ComputeBuffer(ShownArea * Constants.GroupTotalArea / (8 * 4), 4);
+        _visualizedGroups = new NativeArray<CglGroupData>(_shownArea, Allocator.Persistent);
+        _computeBuffer = new ComputeBuffer(1, 4);
 
         // Application.targetFrameRate = 24;
     }
@@ -41,12 +41,39 @@ public partial class UpdateRenderData : SystemBase
     protected override void OnDestroy()
     {
         _visualizedGroups.Dispose();
+        _computeBuffer.Dispose();
     }
 
     protected override void OnUpdate()
     {
         var calcMode = SystemAPI.GetSingleton<CalcMode>();
-        if (!calcMode.Render) return;
+        var visualizer = SystemAPI.QueryBuilder().WithAllRW<Visualizer>().Build().GetSingletonRW<Visualizer>();
+
+        var shownSize = calcMode.RenderSize / Constants.GroupTotalEdgeLength;
+        if (shownSize != _shownSize)
+        {
+            _shownSize = shownSize;
+            _shownArea = _shownSize * _shownSize;
+
+
+            _computeBuffer.Dispose();
+            _visualizedGroups.Dispose();
+
+            _visualizedGroups = new NativeArray<CglGroupData>(_shownArea, Allocator.Persistent);
+            var bufferSize = _shownArea * Constants.GroupTotalArea / (8 * 4);
+            if (bufferSize == 0) bufferSize = 1;
+            _computeBuffer = new ComputeBuffer(bufferSize, 4);
+
+            visualizer.Material.SetInt(_lengthProperty, 0);
+            visualizer.Material.SetInt(_sizeProperty, _shownSize);
+            visualizer.Material.SetInt(_areaProperty, _shownArea);
+            visualizer.Material.SetBuffer(_bufferProperty, _computeBuffer);
+        }
+
+        if (calcMode.RenderSize == 0)
+        {
+            return;
+        }
 
         var dir = math.clamp(
             math.float2(
@@ -57,8 +84,6 @@ public partial class UpdateRenderData : SystemBase
             new float2(1, 1)
         );
         var delta = float2.zero;
-
-        var visualizer = SystemAPI.QueryBuilder().WithAllRW<Visualizer>().Build().GetSingletonRW<Visualizer>();
 
         if (Input.GetKey(KeyCode.LeftControl))
         {
@@ -84,9 +109,9 @@ public partial class UpdateRenderData : SystemBase
         }
 
         visualizer.Position += delta;
-        var position = visualizer.Position + ShownSize * Constants.GroupTotalEdgeLength / 2f;
+        var position = visualizer.Position + _shownSize * Constants.GroupTotalEdgeLength / 2f;
 
-        for (var i = 0; i < 9; i++)
+        for (var i = 0; i < _shownArea; i++)
         {
             _visualizedGroups[i] = default;
         }
@@ -97,6 +122,8 @@ public partial class UpdateRenderData : SystemBase
         {
             Groups = _visualizedGroups,
             ViewSimplePosition = simplePosition,
+            ShownSize = _shownSize,
+            ShownArea = _shownArea,
         }.ScheduleParallel(Dependency);
 
         Dependency.Complete();
@@ -110,15 +137,13 @@ public partial class UpdateRenderData : SystemBase
 
         visualizer.Material.SetVector(_positionProperty, new Vector4(fractionalPos.x, fractionalPos.y, 0, 0));
         visualizer.Material.SetInt(_lengthProperty, reinterpreted.Length);
-        visualizer.Material.SetInt(_sizeProperty, ShownSize);
-        visualizer.Material.SetInt(_areaProperty, ShownArea);
-        visualizer.Material.SetBuffer(_bufferProperty, _computeBuffer);
     }
 
     private partial struct FindRenderData : IJobEntity
     {
         [NativeDisableParallelForRestriction] public NativeArray<CglGroupData> Groups;
         [ReadOnly] public int2 ViewSimplePosition;
+        [ReadOnly] public int ShownSize, ShownArea;
 
         private void Execute(in CurrentCglGroup currentCglGroup, in GroupPosition position)
         {
