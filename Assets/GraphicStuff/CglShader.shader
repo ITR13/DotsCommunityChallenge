@@ -44,13 +44,16 @@ Shader "Unlit/CglShader"
             StructuredBuffer<uint> _buffer;
             uint _length;
 
+            uint _size;
+            uint _area;
+
             v2f vert(appdata v)
             {
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 float2 uv = v.uv;
                 uv.y = 1 - uv.y;
-                o.uv = uv * 3 - _offset;
+                o.uv = uv * _size - _offset;
 
                 return o;
             }
@@ -86,11 +89,11 @@ Shader "Unlit/CglShader"
             fixed4 frag(v2f i) : SV_Target
             {
                 if (i.uv.x < 0 || i.uv.y < 0) return _OobColor;
-                if (i.uv.x >= 3 || i.uv.y >= 3) return _OobColor;
+                if (i.uv.x >= _size || i.uv.y >= _size) return _OobColor;
 
                 const float2 subUv = frac(i.uv);
                 int2 grid = floor(i.uv);
-                return run(subUv, (_length * (grid.x + grid.y * 3)) / 9, _length / 9);
+                return run(subUv, (_length * (grid.y * _size + grid.x)) / _area, _length / _area);
             }
             ENDCG
         }

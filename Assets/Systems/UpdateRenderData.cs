@@ -7,12 +7,17 @@ using UnityEngine;
 [UpdateAfter(typeof(RunCgl2))]
 public partial class UpdateRenderData : SystemBase
 {
+    private const int ShownSize = 1024 / Constants.GroupTotalEdgeLength;
+    private const int ShownArea = ShownSize * ShownSize;
+
     private NativeArray<CglGroupData> _visualizedGroups;
     private ComputeBuffer _computeBuffer;
 
     private int _positionProperty;
     private int _bufferProperty;
     private int _lengthProperty;
+    private int _sizeProperty;
+    private int _areaProperty;
 
     private int2 _previousIntMovement;
 
@@ -24,11 +29,13 @@ public partial class UpdateRenderData : SystemBase
         _positionProperty = Shader.PropertyToID("_offset");
         _bufferProperty = Shader.PropertyToID("_buffer");
         _lengthProperty = Shader.PropertyToID("_length");
+        _sizeProperty = Shader.PropertyToID("_size");
+        _areaProperty = Shader.PropertyToID("_area");
 
-        _visualizedGroups = new NativeArray<CglGroupData>(9, Allocator.Persistent);
-        _computeBuffer = new ComputeBuffer(9 * Constants.GroupTotalArea / (8 * 4), 4);
+        _visualizedGroups = new NativeArray<CglGroupData>(ShownArea, Allocator.Persistent);
+        _computeBuffer = new ComputeBuffer(ShownArea * Constants.GroupTotalArea / (8 * 4), 4);
 
-        Application.targetFrameRate = 24;
+        // Application.targetFrameRate = 24;
     }
 
     protected override void OnDestroy()
@@ -77,13 +84,14 @@ public partial class UpdateRenderData : SystemBase
         }
 
         visualizer.Position += delta;
+        var position = visualizer.Position + ShownSize * Constants.GroupTotalEdgeLength / 2f;
 
         for (var i = 0; i < 9; i++)
         {
             _visualizedGroups[i] = default;
         }
 
-        var simplePosition = (int2)math.floor(-visualizer.Position / Constants.GroupTotalEdgeLength - 0.5f);
+        var simplePosition = (int2)math.floor(-position / Constants.GroupTotalEdgeLength - 0.5f);
 
         Dependency = new FindRenderData
         {
@@ -98,11 +106,12 @@ public partial class UpdateRenderData : SystemBase
         _computeBuffer.SetData(reinterpreted);
 
 
-        var pos = ((visualizer.Position + (simplePosition + new int2(1, 1)) * Constants.GroupTotalEdgeLength) / Constants.GroupTotalEdgeLength);
+        var fractionalPos = ((position + (simplePosition + new int2(1, 1)) * Constants.GroupTotalEdgeLength) / Constants.GroupTotalEdgeLength);
 
-        visualizer.Material.SetVector(_positionProperty, new Vector4(pos.x, pos.y, 0, 0));
+        visualizer.Material.SetVector(_positionProperty, new Vector4(fractionalPos.x, fractionalPos.y, 0, 0));
         visualizer.Material.SetInt(_lengthProperty, reinterpreted.Length);
-
+        visualizer.Material.SetInt(_sizeProperty, ShownSize);
+        visualizer.Material.SetInt(_areaProperty, ShownArea);
         visualizer.Material.SetBuffer(_bufferProperty, _computeBuffer);
     }
 
@@ -115,52 +124,13 @@ public partial class UpdateRenderData : SystemBase
         {
             var groupSimplePosition = position.Position / Constants.GroupTotalEdgeLength;
 
-            if (groupSimplePosition.x == ViewSimplePosition.x)
+            var delta = groupSimplePosition - ViewSimplePosition;
+            if (delta.x < 0 || delta.y < 0 || delta.x >= ShownSize || delta.y >= ShownSize)
             {
-                if (groupSimplePosition.y == ViewSimplePosition.y)
-                {
-                    Debug.Log(groupSimplePosition);
-                    Groups[0] = currentCglGroup.Data;
-                }
-                else if (groupSimplePosition.y == ViewSimplePosition.y + 1)
-                {
-                    Groups[3] = currentCglGroup.Data;
-                }
-                else if (groupSimplePosition.y == ViewSimplePosition.y + 2)
-                {
-                    Groups[6] = currentCglGroup.Data;
-                }
+                return;
             }
-            else if (groupSimplePosition.x == ViewSimplePosition.x + 1)
-            {
-                if (groupSimplePosition.y == ViewSimplePosition.y)
-                {
-                    Groups[1] = currentCglGroup.Data;
-                }
-                else if (groupSimplePosition.y == ViewSimplePosition.y + 1)
-                {
-                    Groups[4] = currentCglGroup.Data;
-                }
-                else if (groupSimplePosition.y == ViewSimplePosition.y + 2)
-                {
-                    Groups[7] = currentCglGroup.Data;
-                }
-            }
-            else if (groupSimplePosition.x == ViewSimplePosition.x + 2)
-            {
-                if (groupSimplePosition.y == ViewSimplePosition.y)
-                {
-                    Groups[2] = currentCglGroup.Data;
-                }
-                else if (groupSimplePosition.y == ViewSimplePosition.y + 1)
-                {
-                    Groups[5] = currentCglGroup.Data;
-                }
-                else if (groupSimplePosition.y == ViewSimplePosition.y + 2)
-                {
-                    Groups[8] = currentCglGroup.Data;
-                }
-            }
+
+            Groups[delta.y * ShownSize + delta.x] = currentCglGroup.Data;
         }
     }
 }

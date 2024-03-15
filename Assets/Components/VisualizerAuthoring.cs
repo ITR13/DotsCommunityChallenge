@@ -21,7 +21,7 @@ public class VisualizerAuthoring : MonoBehaviour
                 entity,
                 new Visualizer
                 {
-                    Material = authoring.Material, //Position = new float2(Constants.GroupTotalEdgeLength, Constants.GroupTotalEdgeLength)
+                    Material = authoring.Material,
                 }
             );
         }
