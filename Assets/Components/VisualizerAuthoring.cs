@@ -17,7 +17,13 @@ public class VisualizerAuthoring : MonoBehaviour
         public override void Bake(VisualizerAuthoring authoring)
         {
             var entity = GetEntity(TransformUsageFlags.Dynamic);
-            AddComponentObject(entity, new Visualizer {Material = authoring.Material, Position = new float2(Constants.GroupTotalEdgeLength, Constants.GroupTotalEdgeLength)});
+            AddComponentObject(
+                entity,
+                new Visualizer
+                {
+                    Material = authoring.Material, //Position = new float2(Constants.GroupTotalEdgeLength, Constants.GroupTotalEdgeLength)
+                }
+            );
         }
     }
 }

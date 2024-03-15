@@ -80,11 +80,14 @@ Shader "Unlit/CglShader"
                 uint value = _buffer[index + offset];
 
                 bool alive = (value >> bit) & 1;
-                return alive ? _OnColor : float4(index / (float)maxLength, bit / 32.0, frac(index / 4.0), 1);;
+                return alive ? _OnColor : _OffColor;
             }
 
             fixed4 frag(v2f i) : SV_Target
             {
+                if (i.uv.x < 0 || i.uv.y < 0) return _OobColor;
+                if (i.uv.x >= 3 || i.uv.y >= 3) return _OobColor;
+
                 const float2 subUv = frac(i.uv);
                 int2 grid = floor(i.uv);
                 return run(subUv, (_length * (grid.x + grid.y * 3)) / 9, _length / 9);
