@@ -328,22 +328,17 @@ public partial struct RunCgl2 : ISystem
                                 for (var bx = 0; bx < Constants.BitFieldSize; bx++)
                                 {
                                     var value = currentBitmask & 1;
-                                    var aliveFlag = (byte)(currentBitmask << 3);
-                                    var addVal = (byte)value;
 
                                     var index = PosToBitIndex(x, y, bx, by);
-
-                                    neighbors[index] += aliveFlag;
-                                    neighbors[index - 1] += addVal;
-                                    neighbors[index + 1] += addVal;
-
-                                    neighbors[index - ArrayWidth - 1] += addVal;
-                                    neighbors[index - ArrayWidth - 0] += addVal;
-                                    neighbors[index - ArrayWidth + 1] += addVal;
-
-                                    neighbors[index + ArrayWidth - 1] += addVal;
-                                    neighbors[index + ArrayWidth - 0] += addVal;
-                                    neighbors[index + ArrayWidth + 1] += addVal;
+                                    var toAdd = 0b000000010000000100000001 * (uint)value;
+                                    var toAddCenter = 0b000000010000100000000001 * (uint)value;
+                                    unsafe
+                                    {
+                                        var ptr = (byte*)neighbors.GetUnsafePtr();
+                                        *(uint*)(ptr + index - 1) += toAddCenter;
+                                        *(uint*)(ptr + index - ArrayWidth - 1) += toAdd;
+                                        *(uint*)(ptr + index + ArrayWidth - 1) += toAdd;
+                                    }
 
                                     currentBitmask >>= 1;
                                 }
