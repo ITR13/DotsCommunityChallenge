@@ -60,19 +60,19 @@ Shader "Unlit/CglShader"
 
             fixed4 run(float2 uv, uint offset, uint maxLength)
             {
-                int2 pos = uv * 4 * 8;
+                uint2 pos = uv * 4 * 8;
                 if (pos.x < 0 || pos.x >= 4 * 16 || pos.y < 0 || pos.y >= 4 * 16)
                 {
                     return _OobColor;
                 }
 
-                int bitX = pos.x % 8;
-                int groupX = pos.x / 8;
+                uint bitX = pos.x % 8;
+                uint groupX = pos.x / 8;
 
-                int byteY = pos.y % 8;
-                int groupY = pos.y / 8;
+                uint byteY = pos.y % 8;
+                uint groupY = pos.y / 8;
 
-                int index = (byteY / 4) + groupX * 2 + groupY * 2 * 4;
+                uint index = (byteY / 4) + groupX * 2 + groupY * 2 * 4;
                 uint bit = 8 * (byteY % 4) + bitX;
 
                 if (index < 0 || index >= maxLength)
@@ -93,7 +93,11 @@ Shader "Unlit/CglShader"
 
                 const float2 subUv = frac(i.uv);
                 int2 grid = floor(i.uv);
-                return run(subUv, (_length * (grid.y * _size + grid.x)) / _area, _length / _area);
+
+                // (_length * (grid.y * _size + grid.x)) / _area
+                // (grid_y // 32) * (2**x) + (grid_x // 32)
+                
+                return run(subUv, 32 * grid.y * _size + 32 * grid.x, _length / _area);
             }
             ENDCG
         }

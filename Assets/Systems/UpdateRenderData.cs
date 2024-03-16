@@ -61,6 +61,7 @@ public partial class UpdateRenderData : SystemBase
 
             _visualizedGroups = new NativeArray<CglGroupData>(_shownArea, Allocator.Persistent);
             var bufferSize = _shownArea * Constants.GroupTotalArea / (8 * 4);
+            Debug.LogError(bufferSize);
             if (bufferSize == 0) bufferSize = 1;
             _computeBuffer = new ComputeBuffer(bufferSize, 4);
 
@@ -108,6 +109,21 @@ public partial class UpdateRenderData : SystemBase
             delta += dir * SystemAPI.Time.DeltaTime * Constants.GroupTotalEdgeLength * 2;
         }
 
+        if (_shownSize > 64)
+        {
+            delta *= _shownSize / 64f;
+        }
+
+        if (Input.GetKey(KeyCode.LeftShift))
+        {
+            delta *= 3;
+        }
+
+        if (Input.GetKey(KeyCode.RightShift))
+        {
+            delta *= 3;
+        }
+
         visualizer.Position += delta;
         var position = visualizer.Position + _shownSize * Constants.GroupTotalEdgeLength / 2f;
 
@@ -118,15 +134,21 @@ public partial class UpdateRenderData : SystemBase
 
         var simplePosition = (int2)math.floor(-position / Constants.GroupTotalEdgeLength - 0.5f);
 
-        Dependency = new FindRenderData
+        var updateRenderDataJob = new FindRenderData
         {
             Groups = _visualizedGroups,
             ViewSimplePosition = simplePosition,
             ShownSize = _shownSize,
             ShownArea = _shownArea,
-        }.ScheduleParallel(Dependency);
+        };
 
+#if DEBUGGER_FIX
+        updateRenderDataJob.Run();
+#else
+        Dependency = updateRenderDataJob.ScheduleParallel(Dependency);
         Dependency.Complete();
+#endif
+
 
 
         NativeArray<uint> reinterpreted = _visualizedGroups.Reinterpret<uint>(Constants.GroupTotalArea / 8);
@@ -150,6 +172,7 @@ public partial class UpdateRenderData : SystemBase
             var groupSimplePosition = position.Position / Constants.GroupTotalEdgeLength;
 
             var delta = groupSimplePosition - ViewSimplePosition;
+            
             if (delta.x < 0 || delta.y < 0 || delta.x >= ShownSize || delta.y >= ShownSize)
             {
                 return;

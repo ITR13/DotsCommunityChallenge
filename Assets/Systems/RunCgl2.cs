@@ -1,5 +1,3 @@
-#define DEBUGGER_FIX
-
 using System;
 using System.Runtime.CompilerServices;
 using Unity.Burst;
