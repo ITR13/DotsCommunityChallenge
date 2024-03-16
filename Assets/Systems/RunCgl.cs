@@ -25,8 +25,7 @@ public partial struct RunCgl : ISystem
     public void OnUpdate(ref SystemState state)
     {
         var calcMode = SystemAPI.GetSingleton<CalcMode>();
-        if (calcMode.Algorithm != Algorithm.QuadTree) return;
-
+        if (calcMode.Algorithm != Algorithm.QuadTree || calcMode.Paused) return;
 
         var groupsQuery = SystemAPI.QueryBuilder().WithAll<GroupPosition, CurrentCglGroup>().WithAllRW<NextCglGroup>().Build();
 

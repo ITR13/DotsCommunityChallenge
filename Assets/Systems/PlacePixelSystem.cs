@@ -17,7 +17,7 @@ public partial struct PlacePixelSystem : ISystem
         state.EntityManager.DestroyEntity(placePixelQuery);
 
         var calcMode = SystemAPI.GetSingletonRW<CalcMode>();
-        calcMode.ValueRW.SimulateStill = true;
+        calcMode.ValueRW.Paused = true;
 
         foreach (var placePixel in pixelsToPlace)
         {
