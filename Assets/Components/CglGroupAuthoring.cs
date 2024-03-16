@@ -119,6 +119,9 @@ public class CglGroupAuthoring : MonoBehaviour
             var x = index % width;
             var y = index / width;
 
+            x -= width / 2;
+            y -= width / 2;
+            
             AddComponent(
                 entity,
                 new GroupPosition

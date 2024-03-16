@@ -10,7 +10,7 @@ public partial struct ModeSwapperSystem : ISystem
             new CalcMode
             {
                 Algorithm = Algorithm.HashMap,
-                SimulateStill = false,
+                SimulateStill = true,
                 RenderSize = 1024,
             }
         );
@@ -21,7 +21,8 @@ public partial struct ModeSwapperSystem : ISystem
         var singleton = SystemAPI.GetSingletonRW<CalcMode>();
         if (Input.GetKeyDown(KeyCode.Space))
         {
-            singleton.ValueRW.Algorithm = (Algorithm)(((int)singleton.ValueRW.Algorithm + 1) % 2);
+            singleton.ValueRW.SimulateStill ^= true;
+            // singleton.ValueRW.Algorithm = (Algorithm)(((int)singleton.ValueRW.Algorithm + 1) % 2);
         }
 
         if (Input.GetKeyDown(KeyCode.Alpha0))

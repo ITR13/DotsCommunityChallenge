@@ -304,7 +304,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 62c0b97ea8b74176a901f2c67bbba582, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  WhatToSpawn: 3
+  WhatToSpawn: 0
   SpawnInAll: 1
 --- !u!1 &801279922
 GameObject:
