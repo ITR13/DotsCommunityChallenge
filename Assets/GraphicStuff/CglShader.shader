@@ -94,8 +94,9 @@ Shader "Unlit/CglShader"
                 const float2 subUv = frac(i.uv);
                 int2 grid = floor(i.uv);
 
-                // (_length * (grid.y * _size + grid.x)) / _area
-                // (grid_y // 32) * (2**x) + (grid_x // 32)
+                // The following two lines are the same, but the first line has an integer overflow:
+                //   (_length * (grid.y * _size + grid.x)) / _area
+                //   32 * grid.y * _size + 32 * grid.x
                 
                 return run(subUv, 32 * grid.y * _size + 32 * grid.x, _length / _area);
             }
