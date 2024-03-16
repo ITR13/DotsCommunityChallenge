@@ -32,61 +32,78 @@ public partial struct DrawSystem : ISystem
         var bottomLeftPos = (new float2(inputPos.x, inputPos.y) - bottomLeft) / screenSize;
         bottomLeftPos.y = 1 - bottomLeftPos.y;
 
-        var calcMode = SystemAPI.GetSingletonRW<CalcMode>();
-        
-        if (calcMode.ValueRO.RenderSize == 0) return;
+        var calcMode = SystemAPI.GetSingleton<CalcMode>();
+
+        if (calcMode.RenderSize == 0) return;
 
         var visualizer = SystemAPI.QueryBuilder().WithAll<Visualizer>().Build().GetSingleton<Visualizer>();
 
-        var tilePos = bottomLeftPos * calcMode.ValueRO.RenderSize - visualizer.Position - calcMode.ValueRO.RenderSize / 2f - Constants.GroupTotalEdgeLength;
+        var tilePos = bottomLeftPos * calcMode.RenderSize - visualizer.Position - calcMode.RenderSize / 2f - Constants.GroupTotalEdgeLength;
 
         var intPos = (int2)math.floor(tilePos);
-        if (!Input.GetMouseButtonDown(0) && math.all(_prevPos == intPos))
+        
+        if (Input.GetMouseButtonDown(0))
+        {
+            _prevPos = intPos;
+            
+            var placePixel = state.EntityManager.CreateEntity(typeof(PlacePixel));
+            state.EntityManager.SetComponentData(
+                placePixel,
+                new PlacePixel
+                {
+                    Position = tilePos,
+                }
+            );
+            return;
+        }
+
+        if (math.all(_prevPos == intPos))
         {
             return;
         }
 
-        calcMode.ValueRW.SimulateStill = true;
-
+        DrawLine(_prevPos, tilePos, ref state);
         _prevPos = intPos;
+    }
 
+    private void DrawLine(float2 start, float2 end, ref SystemState state)
+    {
+        var p0 = (int2)math.floor(start);
+        var p1 = (int2)math.floor(end);
 
-        var groupPos = Constants.GroupTotalEdgeLength * (int2)math.floor(tilePos / Constants.GroupTotalEdgeLength);
+        int dx = math.abs(p1.x - p0.x);
+        int dy = math.abs(p1.y - p0.y);
+        int sx = p0.x < p1.x ? 1 : -1;
+        int sy = p0.y < p1.y ? 1 : -1;
+        int err = dx - dy;
 
-        var targetEntity = CollectionHelper.CreateNativeArray<Entity>(1, state.WorldUpdateAllocator);
-        var groupData = CollectionHelper.CreateNativeArray<CurrentCglGroup>(1, state.WorldUpdateAllocator);
-        new DrawSystemJob
+        while (true)
         {
-            Position = groupPos,
-            Entity = targetEntity,
-            GroupData = groupData,
-        }.Run();
+            if (p0.x == p1.x && p0.y == p1.y)
+                break;
 
-        var relativePos = (int2)math.floor(tilePos - groupPos);
-        // Divide by 8 since it needs the amount of bytes in CurrentCglGroup
-        var reinterpretedGroup = groupData.Reinterpret<ulong>(Constants.GroupTotalArea / 8);
+            int e2 = 2 * err;
+            if (e2 > -dy)
+            {
+                err -= dy;
+                p0.x += sx;
+            }
 
-        var subGroupPos = relativePos / Constants.BitFieldSize;
-        var bitIndex = relativePos % Constants.BitFieldSize;
+            if (e2 < dx)
+            {
+                err += dx;
+                p0.y += sy;
+            }
 
-        var value = reinterpretedGroup[subGroupPos.y * Constants.GroupSize + subGroupPos.x];
-        var bitShifted = (ulong)1 << (bitIndex.y * Constants.BitFieldSize + bitIndex.x);
-        value ^= bitShifted;
-        reinterpretedGroup[subGroupPos.y * Constants.GroupSize + subGroupPos.x] = value;
-
-        if (targetEntity[0] == Entity.Null)
-        {
-            targetEntity[0] = state.EntityManager.CreateEntity(typeof(GroupPosition), typeof(CurrentCglGroup), typeof(NextCglGroup));
+            var placePixel = state.EntityManager.CreateEntity(typeof(PlacePixel));
             state.EntityManager.SetComponentData(
-                targetEntity[0],
-                new GroupPosition
+                placePixel,
+                new PlacePixel
                 {
-                    Position = groupPos,
+                    Position = new float2(p0.x, p0.y),
                 }
             );
         }
-
-        state.EntityManager.SetComponentData(targetEntity[0], groupData[0]);
     }
 
     [BurstCompile]

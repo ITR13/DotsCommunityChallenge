@@ -18,6 +18,7 @@ public class CglGroupAuthoring : MonoBehaviour
         TopBlock,
         BotBlock,
         TopLeftBlock,
+        Lightweight,
     }
 
     public Spawnable WhatToSpawn;
@@ -39,6 +40,7 @@ public class CglGroupAuthoring : MonoBehaviour
             const ulong topblock = 0b1111111111111111111111111111111100000000000000000000000000000000;
             const ulong botblock = ~topblock;
             const ulong topleftblock = 0b1111000011110000111100001111000000000000000000000000000000000000;
+            const ulong lightweight = 0b0011110000100010001000000001001000000000;
 
             var current = authoring.WhatToSpawn switch
             {
@@ -52,6 +54,7 @@ public class CglGroupAuthoring : MonoBehaviour
                 Spawnable.TopBlock => topblock,
                 Spawnable.BotBlock => botblock,
                 Spawnable.TopLeftBlock => topleftblock,
+                Spawnable.Lightweight => lightweight,
                 _ => (ulong)0,
             };
 
