@@ -61,7 +61,7 @@ public partial class UpdateRenderData : SystemBase
 
             _visualizedGroups = new NativeArray<CglGroupData>(_shownArea, Allocator.Persistent);
             var bufferSize = _shownArea * Constants.GroupTotalArea / (8 * 4);
-            Debug.LogError(bufferSize);
+
             if (bufferSize == 0) bufferSize = 1;
             _computeBuffer = new ComputeBuffer(bufferSize, 4);
 
