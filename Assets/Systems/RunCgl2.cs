@@ -58,7 +58,7 @@ public partial struct RunCgl2 : ISystem
             BotCentOffset = new int2(0, +Constants.GroupTotalEdgeLength),
             BotRighOffset = new int2(+Constants.GroupTotalEdgeLength, +Constants.GroupTotalEdgeLength),
 
-            ActiveGroups = activeGroups,
+            ActiveGroups = activeGroups.AsParallelWriter(),
         };
 #if DEBUGGER_FIX
         state.Dependency.Complete();
@@ -127,7 +127,7 @@ public partial struct RunCgl2 : ISystem
         [ReadOnly] public NativeHashMap<int2, Entity> Groups;
         [ReadOnly] public ComponentLookup<CurrentCglGroup> CurrentLookup;
 
-        public NativeParallelHashMap<int2, bool> ActiveGroups;
+        public NativeParallelHashMap<int2, bool>.ParallelWriter ActiveGroups;
 
         public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
