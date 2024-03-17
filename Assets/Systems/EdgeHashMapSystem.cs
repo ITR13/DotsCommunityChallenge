@@ -356,7 +356,7 @@ public partial struct EdgeHashMapSystem : ISystem
 
                 #endregion
 
-                var hasAnyInLast = false;
+                var hasAnyInSelf = false;
                 {
                     var current = currentGroups[i];
                     for (var y = 0; y < Constants.GroupSize; y++)
@@ -369,7 +369,7 @@ public partial struct EdgeHashMapSystem : ISystem
                                 currentBitmask = ((ulong*)&current)[y * Constants.GroupSize + x];
                             }
 
-                            hasAnyInLast |= currentBitmask != 0;
+                            hasAnyInSelf |= currentBitmask != 0;
 
                             for (var by = 0; by < Constants.BitFieldSize && currentBitmask > 0; by++)
                             {
@@ -395,8 +395,8 @@ public partial struct EdgeHashMapSystem : ISystem
                     }
                 }
 
-                ActiveGroups.TryAdd(position, hasAnyInLast);
-                if (!hasAny && !hasAnyInLast) return;
+                ActiveGroups.TryAdd(position, hasAnyInSelf);
+                if (!hasAny && !hasAnyInSelf) continue;
 
                 {
                     var next = new NextCglGroup();
