@@ -5,6 +5,7 @@ using UnityEngine;
 
 [UpdateAfter(typeof(RunCgl))]
 [UpdateAfter(typeof(RunCgl2))]
+[UpdateAfter(typeof(RunCgl3))]
 public partial class UpdateRenderData : SystemBase
 {
     private int _shownSize = 0;
@@ -150,7 +151,6 @@ public partial class UpdateRenderData : SystemBase
 #endif
 
 
-
         NativeArray<uint> reinterpreted = _visualizedGroups.Reinterpret<uint>(Constants.GroupTotalArea / 8);
         _computeBuffer.SetData(reinterpreted);
 
@@ -172,7 +172,7 @@ public partial class UpdateRenderData : SystemBase
             var groupSimplePosition = position.Position / Constants.GroupTotalEdgeLength;
 
             var delta = groupSimplePosition - ViewSimplePosition;
-            
+
             if (delta.x < 0 || delta.y < 0 || delta.x >= ShownSize || delta.y >= ShownSize)
             {
                 return;

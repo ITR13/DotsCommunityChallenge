@@ -2,6 +2,7 @@ using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 
+[UpdateAfter(typeof(UpdateRenderData))]
 public partial struct ModeSwapperSystem : ISystem
 {
     public void OnCreate(ref SystemState state)
@@ -9,10 +10,11 @@ public partial struct ModeSwapperSystem : ISystem
         state.EntityManager.CreateSingleton(
             new CalcMode
             {
-                Algorithm = Algorithm.HashMap,
+                Algorithm = Algorithm.EntityHashMap,
                 Paused = true,
                 RenderSize = 1024,
                 ShowUi = true,
+                // SimulateStill = true,
             }
         );
     }
@@ -32,7 +34,7 @@ public partial struct ModeSwapperSystem : ISystem
 
         if (Input.GetKeyDown(KeyCode.E))
         {
-            singleton.ValueRW.Algorithm = (Algorithm)(((int)singleton.ValueRW.Algorithm + 1) % 2);
+            singleton.ValueRW.Algorithm = (Algorithm)(((int)singleton.ValueRW.Algorithm + 1) % (int)Algorithm.MAX_VALUE);
         }
 
         if (Input.GetKeyDown(KeyCode.Delete))

@@ -7,16 +7,23 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
+using UnityEngine;
 using UnityEngine.Assertions;
 
-public partial struct RunCgl2 : ISystem
+public partial struct RunCgl3 : ISystem
 {
     private const int RowPadding = 1, ColumnPadding = 1;
     private const int ArrayWidth = ColumnPadding * 2 + Constants.GroupTotalEdgeLength;
     private EntityArchetype _groupArchetype;
 
+    private struct Edges
+    {
+        public uint Top, Bot, Left, Right;
+    }
+
     public void OnCreate(ref SystemState state)
     {
+        Application.targetFrameRate = -1;
         state.RequireForUpdate<NextCglGroup>();
         state.RequireForUpdate<CalcMode>();
 
@@ -27,26 +34,37 @@ public partial struct RunCgl2 : ISystem
     public void OnUpdate(ref SystemState state)
     {
         var calcMode = SystemAPI.GetSingleton<CalcMode>();
-        if (calcMode.Algorithm != Algorithm.EntityHashMap || calcMode.Paused) return;
+        if (calcMode.Algorithm != Algorithm.EdgeHashMap || calcMode.Paused) return;
 
         var groupQuery = SystemAPI.QueryBuilder().WithAll<GroupPosition, CurrentCglGroup>().WithAllRW<NextCglGroup>().Build();
 
         var groupCount = groupQuery.CalculateEntityCount();
-        var groups = new NativeHashMap<int2, Entity>(groupCount, state.WorldUpdateAllocator);
+        var groups = new NativeParallelHashMap<int2, Edges>(groupCount, state.WorldUpdateAllocator);
         var activeGroups = new NativeParallelHashMap<int2, bool>(groupCount, state.WorldUpdateAllocator);
 
-        state.Dependency = new PopulateGroupHashmapJob
+        var positionTypeHandle = SystemAPI.GetComponentTypeHandle<GroupPosition>(true);
+        var currentTypeHandle = SystemAPI.GetComponentTypeHandle<CurrentCglGroup>(true);
+        var nextTypeHandle = SystemAPI.GetComponentTypeHandle<NextCglGroup>();
+
+        var hashmapJob = new PopulateGroupHashmapJob
         {
-            Groups = groups,
-        }.Schedule(state.Dependency);
+            PositionTypeHandle = positionTypeHandle,
+            CurrentTypeHandle = currentTypeHandle,
+            Groups = groups.AsParallelWriter(),
+        };
+
+#if DEBUGGER_FIX
+        hashmapJob.Run(groupQuery);
+#else
+        state.Dependency = hashmapJob.ScheduleParallel(groupQuery, state.Dependency);
+#endif
 
         var updateGroup = new UpdateGroup
         {
-            PositionTypeHandle = SystemAPI.GetComponentTypeHandle<GroupPosition>(true),
-            CurrentTypeHandle = SystemAPI.GetComponentTypeHandle<CurrentCglGroup>(true),
-            NextTypeHandle = SystemAPI.GetComponentTypeHandle<NextCglGroup>(),
-            Groups = groups,
-            CurrentLookup = SystemAPI.GetComponentLookup<CurrentCglGroup>(true),
+            PositionTypeHandle = positionTypeHandle,
+            CurrentTypeHandle = currentTypeHandle,
+            NextTypeHandle = nextTypeHandle,
+            Groups = groups.AsReadOnly(),
 
             TopLeftOffset = new int2(-Constants.GroupTotalEdgeLength, -Constants.GroupTotalEdgeLength),
             TopCentOffset = new int2(0, -Constants.GroupTotalEdgeLength),
@@ -61,7 +79,6 @@ public partial struct RunCgl2 : ISystem
             ActiveGroups = activeGroups.AsParallelWriter(),
         };
 #if DEBUGGER_FIX
-        state.Dependency.Complete();
         updateGroup.Run(groupQuery);
 #else
         state.Dependency = updateGroup.ScheduleParallel(groupQuery, state.Dependency);
@@ -95,13 +112,73 @@ public partial struct RunCgl2 : ISystem
     }
 
     [BurstCompile]
-    private partial struct PopulateGroupHashmapJob : IJobEntity
+    private struct PopulateGroupHashmapJob : IJobChunk
     {
-        public NativeHashMap<int2, Entity> Groups;
+        public NativeParallelHashMap<int2, Edges>.ParallelWriter Groups;
+        [ReadOnly] public ComponentTypeHandle<CurrentCglGroup> CurrentTypeHandle;
+        [ReadOnly] public ComponentTypeHandle<GroupPosition> PositionTypeHandle;
 
-        private void Execute(in Entity entity, in GroupPosition groupPosition)
+        public unsafe void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
         {
-            Groups[groupPosition.Position] = entity;
+            Assert.IsFalse(useEnabledMask);
+            var positions = chunk.GetNativeArray(ref PositionTypeHandle);
+            var currentGroups = chunk.GetNativeArray(ref CurrentTypeHandle);
+
+            var currentStartPtr = (CurrentCglGroup*)currentGroups.GetUnsafeReadOnlyPtr();
+
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                var currentPtr = (ulong*)&(currentStartPtr[i]);
+
+                uint left = 0;
+                uint right = 0;
+
+                for (byte subgroup = 0; subgroup < Constants.GroupSize; subgroup++)
+                {
+                    ulong rightValue = currentPtr[(subgroup + 1) * Constants.GroupSize - 1];
+                    ulong leftValue = currentPtr[subgroup * Constants.GroupSize];
+
+                    if (rightValue == 0 && leftValue == 0) continue;
+
+                    for (byte by = 0; by < 8; by++)
+                    {
+                        var rightIsAlive = (uint)(rightValue >> (by * 8 + 7)) & 1;
+                        var leftIsAlive = (uint)(leftValue >> (by * 8)) & 1;
+                        right |= rightIsAlive << (subgroup * 8 + by);
+                        left |= leftIsAlive << (subgroup * 8 + by);
+                    }
+                }
+
+#if DEBUGGER_FIX
+                var group = *(CglGroupData*)currentPtr;
+#endif
+
+                var bot = (uint)(
+                    (currentPtr[12] >> 0x38) & 0b00000000000000000000000011111111 |
+                    (currentPtr[13] >> 0x30) & 0b00000000000000001111111100000000 |
+                    (currentPtr[14] >> 0x28) & 0b00000000111111110000000000000000 |
+                    (currentPtr[15] >> 0x20) & 0b11111111000000000000000000000000
+                );
+                var top = (uint)(
+                    (currentPtr[0] << 0x00) & 0b00000000000000000000000011111111 |
+                    (currentPtr[1] << 0x08) & 0b00000000000000001111111100000000 |
+                    (currentPtr[2] << 0x10) & 0b00000000111111110000000000000000 |
+                    (currentPtr[3] << 0x18) & 0b11111111000000000000000000000000
+                );
+
+                if (left == 0 && right == 0 && top == 0 && bot == 0) continue;
+
+                Groups.TryAdd(
+                    positions[i].Position,
+                    new Edges
+                    {
+                        Bot = bot,
+                        Top = top,
+                        Left = left,
+                        Right = right,
+                    }
+                );
+            }
         }
     }
 
@@ -124,8 +201,7 @@ public partial struct RunCgl2 : ISystem
         [ReadOnly] public ComponentTypeHandle<GroupPosition> PositionTypeHandle;
         public ComponentTypeHandle<NextCglGroup> NextTypeHandle;
 
-        [ReadOnly] public NativeHashMap<int2, Entity> Groups;
-        [ReadOnly] public ComponentLookup<CurrentCglGroup> CurrentLookup;
+        [ReadOnly] public NativeParallelHashMap<int2, Edges>.ReadOnly Groups;
 
         public NativeParallelHashMap<int2, bool>.ParallelWriter ActiveGroups;
 
@@ -133,18 +209,25 @@ public partial struct RunCgl2 : ISystem
         {
             Assert.IsFalse(useEnabledMask);
 
+            var positions = chunk.GetNativeArray(ref PositionTypeHandle);
             var currentGroups = chunk.GetNativeArray(ref CurrentTypeHandle);
             var nextGroups = chunk.GetNativeArray(ref NextTypeHandle);
-            var positions = chunk.GetNativeArray(ref PositionTypeHandle);
 
             // NB! One row uses 8 bits from each of the 4 sequential SubGroups
             var neighbors = new NativeArray<byte>(ArrayWidth * (Constants.GroupTotalEdgeLength + ColumnPadding * 2), Allocator.Temp);
 
             // bit pattern
-            var precalculated = new NativeArray<ulong>(16, Allocator.Temp);
+            var precalculatedSum = new NativeArray<byte>(8, Allocator.Temp);
+            for (var i = 0; i < 8; i++)
+            {
+                precalculatedSum[i] = (byte)math.countbits(i);
+            }
+
+            // bit pattern
+            var precalculatedAlive = new NativeArray<ulong>(16, Allocator.Temp);
             for (var i = 0; i < 16; i++)
             {
-                precalculated[i] = (i is 0b1010 or 0b1011 or 0b0011) ? 1 : (ulong)0;
+                precalculatedAlive[i] = (i is 0b1010 or 0b1011 or 0b0011) ? 1 : (ulong)0;
             }
 
             for (var i = 0; i < chunk.Count; i++)
@@ -155,40 +238,36 @@ public partial struct RunCgl2 : ISystem
                 #region Courners
 
                 {
-                    if (Groups.TryGetValue(position + TopLeftOffset, out var currentNeighborEntity))
+                    if (Groups.TryGetValue(position + TopLeftOffset, out var edges))
                     {
-                        var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        var isAlive = (byte)((currentNeighbor.Data.Alive15 >> 0x3F) & 1);
+                        var isAlive = (byte)(edges.Bot >> 31);
                         neighbors[PosToBitIndex(0, 0, 0, 0)] = isAlive;
                         hasAny |= isAlive != 0;
                     }
                 }
 
                 {
-                    if (Groups.TryGetValue(position + TopRighOffset, out var currentNeighborEntity))
+                    if (Groups.TryGetValue(position + TopRighOffset, out var edges))
                     {
-                        var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        var isAlive = (byte)((currentNeighbor.Data.Alive12 >> 0x38) & 1);
+                        var isAlive = (byte)(edges.Bot & 1);
                         neighbors[PosToBitIndex(Constants.GroupSize - 1, 0, Constants.BitFieldSize - 1, 0)] = isAlive;
                         hasAny |= isAlive != 0;
                     }
                 }
 
                 {
-                    if (Groups.TryGetValue(position + BotLeftOffset, out var currentNeighborEntity))
+                    if (Groups.TryGetValue(position + BotLeftOffset, out var edges))
                     {
-                        var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        var isAlive = (byte)((currentNeighbor.Data.Alive3 >> 0x07) & 1);
+                        var isAlive = (byte)(edges.Top >> 31);
                         neighbors[PosToBitIndex(0, Constants.GroupSize - 1, 0, Constants.BitFieldSize - 1)] = isAlive;
                         hasAny |= isAlive != 0;
                     }
                 }
 
                 {
-                    if (Groups.TryGetValue(position + BotRighOffset, out var currentNeighborEntity))
+                    if (Groups.TryGetValue(position + BotRighOffset, out var edges))
                     {
-                        var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        var isAlive = (byte)(currentNeighbor.Data.Alive0 & 1);
+                        var isAlive = (byte)(edges.Top & 1);
                         neighbors[PosToBitIndex(Constants.GroupSize - 1, Constants.GroupSize - 1, Constants.BitFieldSize - 1, Constants.BitFieldSize - 1)] = isAlive;
                         hasAny |= isAlive != 0;
                     }
@@ -196,52 +275,31 @@ public partial struct RunCgl2 : ISystem
 
                 #endregion
 
+
                 #region UpperLowerEdges
 
                 {
-                    if (Groups.TryGetValue(position + TopCentOffset, out var currentNeighborEntity))
+                    if (Groups.TryGetValue(position + TopCentOffset, out var edges) && edges.Bot != 0)
                     {
-                        var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        var topEdge = new BitField32(
-                            (uint)(
-                                (currentNeighbor.Data.Alive12 >> 0x38) & 0b00000000000000000000000011111111 |
-                                (currentNeighbor.Data.Alive13 >> 0x30) & 0b00000000000000001111111100000000 |
-                                (currentNeighbor.Data.Alive14 >> 0x28) & 0b00000000111111110000000000000000 |
-                                (currentNeighbor.Data.Alive15 >> 0x20) & 0b11111111000000000000000000000000
-                            )
-                        );
-
-                        hasAny |= topEdge.Value != 0;
-
+                        hasAny = true;
                         unsafe
                         {
                             // We start this two before 0,0 for ease of use
                             var ptr = (byte*)neighbors.GetUnsafePtr() + PosToBitIndex(0, 0, 0, 0) - 2;
-                            PopulateCenterEdgeNeigbors(topEdge, ptr);
+                            PopulateCenterEdgeNeigbors(edges.Bot, ptr);
                         }
                     }
                 }
 
                 {
-                    if (Groups.TryGetValue(position + BotCentOffset, out var currentNeighborEntity))
+                    if (Groups.TryGetValue(position + BotCentOffset, out var edges) && edges.Top != 0)
                     {
-                        var currentNeighbor = CurrentLookup[currentNeighborEntity];
-                        var bottomEdge = new BitField32(
-                            (uint)(
-                                (currentNeighbor.Data.Alive0 << 0x00) & 0b00000000000000000000000011111111 |
-                                (currentNeighbor.Data.Alive1 << 0x08) & 0b00000000000000001111111100000000 |
-                                (currentNeighbor.Data.Alive2 << 0x10) & 0b00000000111111110000000000000000 |
-                                (currentNeighbor.Data.Alive3 << 0x18) & 0b11111111000000000000000000000000
-                            )
-                        );
-
-                        hasAny |= bottomEdge.Value != 0;
-
+                        hasAny = true;
                         unsafe
                         {
                             // We start this two before [max-1],0 for ease of use
                             var ptr = ((byte*)neighbors.GetUnsafePtr()) + PosToBitIndex(0, 3, 0, 7) - 2;
-                            PopulateCenterEdgeNeigbors(bottomEdge, ptr);
+                            PopulateCenterEdgeNeigbors(edges.Top, ptr);
                         }
                     }
                 }
@@ -251,59 +309,44 @@ public partial struct RunCgl2 : ISystem
                 #region LeftRightEdges
 
                 {
-                    if (Groups.TryGetValue(position + MidLeftOffset, out var currentNeighborEntity))
+                    if (Groups.TryGetValue(position + MidLeftOffset, out var edges) && edges.Right != 0)
                     {
-                        var currentNeighbor = CurrentLookup[currentNeighborEntity];
+                        hasAny = true;
 
-                        // Oof, slow?
-                        for (byte subgroup = 0; subgroup < Constants.GroupSize; subgroup++)
+                        var value = edges.Right;
+
+                        var index = PosToBitIndex(0, 0, 0, 0);
+                        neighbors[index] += precalculatedSum[(byte)value & 0b11];
+
+                        for (var y = 1; y < Constants.GroupTotalEdgeLength - 1; y++)
                         {
-                            ulong value;
-                            unsafe
-                            {
-                                value = ((ulong*)&currentNeighbor)[(subgroup + 1) * Constants.GroupSize - 1];
-                            }
-
-                            if (value == 0) continue;
-                            hasAny = true;
-
-                            for (byte by = 0; by < 8; by++)
-                            {
-                                var index = PosToBitIndex(0, subgroup, 0, by);
-                                var isAlive = (byte)((value >> (by * 8 + 7)) & 1);
-                                neighbors[index] += isAlive;
-                                neighbors[index - ArrayWidth] += isAlive;
-                                neighbors[index + ArrayWidth] += isAlive;
-                            }
+                            index += ArrayWidth;
+                            neighbors[index] = precalculatedSum[(byte)value & 0b111];
+                            value >>= 1;
                         }
+
+                        neighbors[index + ArrayWidth] += precalculatedSum[(byte)value & 0b11];
                     }
                 }
 
                 {
-                    if (Groups.TryGetValue(position + MidRighOffset, out var currentNeighborEntity))
+                    if (Groups.TryGetValue(position + MidRighOffset, out var edges) && edges.Left != 0)
                     {
-                        var currentNeighbor = CurrentLookup[currentNeighborEntity];
+                        hasAny = true;
 
-                        for (byte subgroup = 0; subgroup < Constants.GroupSize; subgroup++)
+                        var value = edges.Left;
+                        var index = PosToBitIndex(Constants.GroupSize - 1, 0, Constants.BitFieldSize - 1, 0);
+                        neighbors[index] += precalculatedSum[(byte)value & 0b11];
+
+                        for (var y = 1; y < Constants.GroupTotalEdgeLength - 1; y++)
                         {
-                            ulong value;
-                            unsafe
-                            {
-                                value = ((ulong*)&currentNeighbor)[subgroup * Constants.GroupSize];
-                            }
-
-                            if (value == 0) continue;
-                            hasAny = true;
-
-                            for (byte by = 0; by < 8; by++)
-                            {
-                                var index = PosToBitIndex(3, subgroup, 7, by);
-                                var isAlive = (byte)((value >> (by * 8)) & 1);
-                                neighbors[index] += isAlive;
-                                neighbors[index - ArrayWidth] += isAlive;
-                                neighbors[index + ArrayWidth] += isAlive;
-                            }
+                            index += ArrayWidth;
+                            // No need to += since we know the edges haven't been touched yet
+                            neighbors[index] = precalculatedSum[(byte)value & 0b111];
+                            value >>= 1;
                         }
+
+                        neighbors[index + ArrayWidth] += precalculatedSum[(byte)value & 0b11];
                     }
                 }
 
@@ -362,7 +405,7 @@ public partial struct RunCgl2 : ISystem
                                 {
                                     nextBitmask <<= 1;
                                     var index = PosToBitIndex(x, y, bx, by);
-                                    nextBitmask |= precalculated[neighbors[index] & 0b1111];
+                                    nextBitmask |= precalculatedAlive[neighbors[index] & 0b1111];
                                     neighbors[index] = 0;
                                 }
                             }
@@ -379,7 +422,7 @@ public partial struct RunCgl2 : ISystem
             }
         }
 
-        private unsafe void PopulateCenterEdgeNeigbors(BitField32 line, byte* neighbors)
+        private unsafe void PopulateCenterEdgeNeigbors(uint line, byte* neighbors)
         {
             // The row consists of 32 bytes padded with 2 bytes on each side we shouldn't touch:
             // [x][x][0][1][2][4][5][6][7]..[^3][^2][^1][x][x]
@@ -395,16 +438,14 @@ public partial struct RunCgl2 : ISystem
             const uint addF = 0b00000001000000010000000000000000;
             const uint addL = 0b00000000000000010000000100000000;
 
-            if (line.Value == 0) return;
-
-            var firstAdds = line.GetBits(0) * addF;
-            var lastAdds = line.GetBits(31) * addL;
+            var firstAdds = (line & 1) * addF;
+            var lastAdds = (line >> 31) * addL;
             (*(uint*)neighbors) += firstAdds;
             (*(uint*)(neighbors + 31)) += lastAdds;
 
             for (var bit = 1; bit < 31; bit++)
             {
-                (*(uint*)(neighbors + bit)) += line.GetBits(bit) * addR;
+                (*(uint*)(neighbors + bit)) += ((line >> bit) & 1) * addR;
             }
         }
 

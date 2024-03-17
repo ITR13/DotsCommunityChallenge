@@ -17,8 +17,8 @@ public struct CalcMode : IComponentData
 public enum Algorithm
 {
     QuadTree,
-    HashMap,
-
+    EntityHashMap,
+    EdgeHashMap,
 
     // ReSharper disable once InconsistentNaming
     MAX_VALUE,
