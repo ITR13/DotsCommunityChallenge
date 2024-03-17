@@ -14,6 +14,7 @@ public partial struct ModeSwapperSystem : ISystem
                 Paused = true,
                 RenderSize = 1024,
                 ShowUi = true,
+                Loading = true,
                 // SimulateStill = true,
             }
         );
@@ -23,6 +24,8 @@ public partial struct ModeSwapperSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         var singleton = SystemAPI.GetSingletonRW<CalcMode>();
+        if (singleton.ValueRO.Loading) return;
+
         if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.P))
         {
             singleton.ValueRW.Paused ^= true;

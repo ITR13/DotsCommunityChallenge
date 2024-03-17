@@ -20,6 +20,9 @@ public partial struct DrawSystem : ISystem
         {
             return;
         }
+        
+        var calcMode = SystemAPI.GetSingleton<CalcMode>();
+        if (calcMode.RenderSize == 0 || calcMode.Loading) return;
 
         var inputPos = Input.mousePosition;
         var screenSize = Screen.height;
@@ -31,10 +34,6 @@ public partial struct DrawSystem : ISystem
 
         var bottomLeftPos = (new float2(inputPos.x, inputPos.y) - bottomLeft) / screenSize;
         bottomLeftPos.y = 1 - bottomLeftPos.y;
-
-        var calcMode = SystemAPI.GetSingleton<CalcMode>();
-
-        if (calcMode.RenderSize == 0) return;
 
         var visualizer = SystemAPI.QueryBuilder().WithAll<Visualizer>().Build().GetSingleton<Visualizer>();
 

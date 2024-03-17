@@ -7,6 +7,7 @@ public struct CalcMode : IComponentData
     public bool SimulateStill;
     public bool ShowUi;
     public bool Paused;
+    public bool Loading;
 
     public readonly bool Equals(CalcMode other)
     {

@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 public class VisualController : MonoBehaviour
 {
-    [SerializeField] private GameObject _quad, _graphy;
+    [SerializeField] private GameObject _quad, _graphy, _loadMenu;
     [SerializeField] private Text _text;
 
     private EntityQuery _calcQuery, _statsQuery;
@@ -45,28 +45,35 @@ public class VisualController : MonoBehaviour
         if (_calcQuery.IsEmpty || _statsQuery.IsEmpty) return;
         if (_calcQuery.IsEmpty) return;
 
-        var calc = _calcQuery.GetSingleton<CalcMode>();
+        var calc = _calcQuery.GetSingletonRW<CalcMode>();
         var stats = _statsQuery.GetSingleton<Stats>();
 
-        if (calc.Equals(_prevCalc) && _prevStats.ActiveGroups == stats.ActiveGroups && _prevStats.InactiveGroups == stats.InactiveGroups)
+        if (Input.GetKeyDown(KeyCode.L))
+        {
+            _loadMenu.SetActive(!_loadMenu.activeSelf);
+            calc.ValueRW.Loading = _loadMenu.activeSelf;
+            calc.ValueRW.Paused = true;
+        }
+
+        if (calc.ValueRO.Equals(_prevCalc) && _prevStats.ActiveGroups == stats.ActiveGroups && _prevStats.InactiveGroups == stats.InactiveGroups)
         {
             return;
         }
 
-        _prevCalc = calc;
+        _prevCalc = calc.ValueRO;
         _prevStats = stats;
 
-        _quad.SetActive(calc.RenderSize > 0);
-        _graphy.SetActive(calc.ShowUi);
+        _quad.SetActive(calc.ValueRO.RenderSize > 0);
+        _graphy.SetActive(calc.ValueRO.ShowUi);
 
-        var algorithmName = Enum.GetName(typeof(Algorithm), calc.Algorithm);
-        var pauseColor = calc.Paused ? "<color=red>" : "<color=green>";
-        var renderColor = calc.RenderSize <= 0 ? "<color=red>" : "<color=yellow>";
+        var algorithmName = Enum.GetName(typeof(Algorithm), calc.ValueRO.Algorithm);
+        var pauseColor = calc.ValueRO.Paused ? "<color=red>" : "<color=green>";
+        var renderColor = calc.ValueRO.RenderSize <= 0 ? "<color=red>" : "<color=yellow>";
         
         _text.text = @$"
 <b>Algorithm:</b> {algorithmName}
-<b>VisScale:</b> {renderColor}{calc.RenderSize}</color>
-<b>Simulating:</b> {pauseColor}{!calc.Paused}</color>
+<b>VisScale:</b> {renderColor}{calc.ValueRO.RenderSize}</color>
+<b>Simulating:</b> {pauseColor}{!calc.ValueRO.Paused}</color>
 <b>ActiveGroups:</b> {stats.ActiveGroups}
 <b>InactiveGroups:</b> {stats.InactiveGroups}
 ".Trim();
