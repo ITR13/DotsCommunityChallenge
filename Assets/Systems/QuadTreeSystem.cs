@@ -356,7 +356,7 @@ public partial struct QuadTreeSystem : ISystem
         public void Execute(Entity entity, in GroupPosition positionComp)
         {
             var position = positionComp.Position;
-            var activeSelf = ActiveGroups[position];
+            ActiveGroups.TryGetValue(position, out var activeSelf);
 
             if (activeSelf)
             {
@@ -414,7 +414,7 @@ public partial struct QuadTreeSystem : ISystem
             }
 
             stats.ActiveGroups = active;
-            stats.ActiveGroups = inactive;
+            stats.InactiveGroups = inactive;
         }
     }
 }
