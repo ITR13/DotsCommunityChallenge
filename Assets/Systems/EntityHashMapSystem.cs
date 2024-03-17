@@ -9,7 +9,7 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine.Assertions;
 
-public partial struct RunCgl2 : ISystem
+public partial struct EntityHashMapSystem : ISystem
 {
     private const int RowPadding = 1, ColumnPadding = 1;
     private const int ArrayWidth = ColumnPadding * 2 + Constants.GroupTotalEdgeLength;
@@ -72,13 +72,13 @@ public partial struct RunCgl2 : ISystem
         var toCreate = new NativeParallelHashSet<int2>(groupCount * 8, state.WorldUpdateAllocator);
         var toDestroy = new NativeParallelHashSet<Entity>(groupCount, state.WorldUpdateAllocator);
         state.Dependency = JobHandle.CombineDependencies(
-            new RunCgl.CollectStructuralChanges
+            new QuadTreeSystem.CollectStructuralChanges
             {
                 ActiveGroups = activeGroups.AsReadOnly(),
                 ToCreate = toCreate.AsParallelWriter(),
                 ToDestroy = toDestroy.AsParallelWriter(),
             }.ScheduleParallel(state.Dependency),
-            new RunCgl.SwapBuffersJob().ScheduleParallel(state.Dependency)
+            new QuadTreeSystem.SwapBuffersJob().ScheduleParallel(state.Dependency)
         );
 
         state.Dependency.Complete();

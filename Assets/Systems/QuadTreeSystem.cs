@@ -9,7 +9,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Assertions;
 
-public partial struct RunCgl : ISystem
+public partial struct QuadTreeSystem : ISystem
 {
     private EntityArchetype _groupArchetype;
 

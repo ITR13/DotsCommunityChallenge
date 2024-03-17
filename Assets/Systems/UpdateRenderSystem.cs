@@ -3,10 +3,10 @@ using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 
-[UpdateAfter(typeof(RunCgl))]
-[UpdateAfter(typeof(RunCgl2))]
-[UpdateAfter(typeof(RunCgl3))]
-public partial class UpdateRenderData : SystemBase
+[UpdateAfter(typeof(QuadTreeSystem))]
+[UpdateAfter(typeof(EntityHashMapSystem))]
+[UpdateAfter(typeof(EdgeHashMapSystem))]
+public partial class UpdateRenderSystem : SystemBase
 {
     private int _shownSize = 0;
     private int _shownArea = 0;

@@ -17,7 +17,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Assertions;
 
-public partial struct RunCgl4 : ISystem
+public partial struct SixesSystem : ISystem
 {
     private const int RowPadding = 1, ColumnPadding = 1;
     private const int ArrayWidth = ColumnPadding * 2 + Constants.GroupTotalEdgeLength;

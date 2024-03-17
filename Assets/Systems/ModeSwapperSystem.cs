@@ -2,7 +2,7 @@ using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 
-[UpdateAfter(typeof(UpdateRenderData))]
+[UpdateAfter(typeof(UpdateRenderSystem))]
 public partial struct ModeSwapperSystem : ISystem
 {
     public void OnCreate(ref SystemState state)
