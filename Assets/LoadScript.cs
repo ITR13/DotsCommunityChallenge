@@ -61,6 +61,10 @@ public class LoadScript : MonoBehaviour
         calc.ValueRW.Loading = false;
         calc.ValueRW.Paused = true;
 
+
+        var visualizer = em.CreateEntityQuery(typeof(Visualizer)).GetSingletonRW<Visualizer>();
+        visualizer.Position = float2.zero;
+
         var cglQuery = em.CreateEntityQuery(typeof(CurrentCglGroup));
         em.DestroyEntity(cglQuery);
 
@@ -92,30 +96,30 @@ public class LoadScript : MonoBehaviour
             {
                 if (_selectedPattern == 4)
                 {
-                    toSpawn.Data.Alive0 = random.NextUInt() |(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive1 = random.NextUInt() |(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive2 = random.NextUInt() |(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive3 = random.NextUInt() |(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive4 = random.NextUInt() |(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive5 = random.NextUInt() |(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive6 = random.NextUInt() |(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive7 = random.NextUInt() |(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive8 = random.NextUInt() |(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive9 = random.NextUInt() |(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive10 = random.NextUInt()|(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive11 = random.NextUInt()|(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive12 = random.NextUInt()|(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive13 = random.NextUInt()|(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive14 = random.NextUInt()|(ulong)random.NextUInt()<<32;
-                    toSpawn.Data.Alive15 = random.NextUInt()|(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive0 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive1 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive2 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive3 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive4 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive5 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive6 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive7 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive8 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive9 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive10 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive11 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive12 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive13 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive14 = random.NextUInt() | (ulong)random.NextUInt() << 32;
+                    toSpawn.Data.Alive15 = random.NextUInt() | (ulong)random.NextUInt() << 32;
                 }
-                
+
                 var group = em.CreateEntity(typeof(GroupPosition), typeof(CurrentCglGroup), typeof(NextCglGroup));
                 em.SetComponentData(
                     group,
                     new GroupPosition
                     {
-                        Position = new int2(32 * (x - 1), 32 * (y - 1)),
+                        Position = new int2(32 * (x - width / 2 - 1), 32 * (y - height / 2 - 1)),
                     }
                 );
                 em.SetComponentData(group, toSpawn);
@@ -210,16 +214,16 @@ public class LoadScript : MonoBehaviour
         {
             Data = new CglGroupData
             {
-                Alive0 =  0b1100000010100000100000001000000011000000000000000000000000000000,
-                Alive1 =  0b1010011110101010111010000100010110011001001110010000000000000000,
-                Alive2 =  0b0010001110000000000100000011011001011110100000100000000000000000,
-                Alive3 =  0b0001001000000000000000000000000000000000000000000000000000000000,
-                Alive4 =  0b0000000011100000001000000010000001000000000000000110000000000000,
-                Alive5 =  0b1111100100000110101001010010000001001000000000000100010000100000,
-                Alive6 =  0b0010101000000010111110101010100111110100000000010111100111001001,
-                Alive7 =  0b0010010100111011000001000000000000000100001110110010010100100001,
-                Alive8 =  0b0000000000000000010000000010000000100000111000000000000000000000,
-                Alive9 =  0b0100000000001000001000101001110011110101000001100111100110101000,
+                Alive0 = 0b1100000010100000100000001000000011000000000000000000000000000000,
+                Alive1 = 0b1010011110101010111010000100010110011001001110010000000000000000,
+                Alive2 = 0b0010001110000000000100000011011001011110100000100000000000000000,
+                Alive3 = 0b0001001000000000000000000000000000000000000000000000000000000000,
+                Alive4 = 0b0000000011100000001000000010000001000000000000000110000000000000,
+                Alive5 = 0b1111100100000110101001010010000001001000000000000100010000100000,
+                Alive6 = 0b0010101000000010111110101010100111110100000000010111100111001001,
+                Alive7 = 0b0010010100111011000001000000000000000100001110110010010100100001,
+                Alive8 = 0b0000000000000000010000000010000000100000111000000000000000000000,
+                Alive9 = 0b0100000000001000001000101001110011110101000001100111100110101000,
                 Alive10 = 0b1011100010101000001011100010010000010100000001001001000100100100,
                 Alive11 = 0b0000100000101010000111110000000000110001000000000001000000100000,
                 Alive12 = 0b0000000000000000000000000000000000000000000000000000000000000000,
