@@ -18,7 +18,9 @@ public class VisualController : MonoBehaviour
         var world = World.DefaultGameObjectInjectionWorld;
         var entityManager = world.EntityManager;
         _calcQuery = entityManager.CreateEntityQuery(typeof(CalcMode));
+<<<<<<< Updated upstream
         _statsQuery = entityManager.CreateEntityQuery(typeof(Stats));
+=======
         var visualizerQuery = entityManager.CreateEntityQuery(typeof(Visualizer));
         Debug.Log("Waiting for visualizer...");
 
@@ -26,7 +28,7 @@ public class VisualController : MonoBehaviour
         {
             yield return null;
         }
-        Application.targetFrameRate = -1;
+
         
         Debug.Log("Getting visualizer!");
         
@@ -37,13 +39,17 @@ public class VisualController : MonoBehaviour
         visualizer.Material = material;
         Debug.Log("Setting material to renderer");
         _quad.GetComponent<MeshRenderer>().sharedMaterial = visualizer.Material;
+>>>>>>> Stashed changes
     }
 
     private void Update()
     {
-        if (_calcQuery.IsEmpty) return;
+<<<<<<< Updated upstream
         if (_calcQuery.IsEmpty || _statsQuery.IsEmpty) return;
+=======
         if (_calcQuery.IsEmpty) return;
+        Application.targetFrameRate = -1;
+>>>>>>> Stashed changes
 
         var calc = _calcQuery.GetSingleton<CalcMode>();
         var stats = _statsQuery.GetSingleton<Stats>();
