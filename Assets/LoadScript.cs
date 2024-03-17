@@ -64,8 +64,8 @@ public class LoadScript : MonoBehaviour
         var cglQuery = em.CreateEntityQuery(typeof(CurrentCglGroup));
         em.DestroyEntity(cglQuery);
 
-        var sizes = new[] {1, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072};
-        var widths = new[] {1, 32, 32, 64, 64, 128, 128, 256, 256};
+        var sizes = new[] {1, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144};
+        var widths = new[] {1, 32, 32, 64, 64, 128, 128, 256, 256, 512};
         var size = sizes[_selectedSize];
 
         if (_selectedPattern == 2)
