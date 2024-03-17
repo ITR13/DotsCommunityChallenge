@@ -49,8 +49,8 @@ public partial struct ModeSwapperSystem : ISystem
         for (var i = KeyCode.Alpha1; i <= KeyCode.Alpha9; i++)
         {
             if (!Input.GetKeyDown(i)) continue;
-            var size = math.pow(2, (int)(i - KeyCode.Alpha0) + 4);
-            singleton.ValueRW.RenderSize = Mathf.RoundToInt(size);
+            var size = math.pow(2, i - KeyCode.Alpha0 + 2);
+            singleton.ValueRW.RenderSize = Mathf.RoundToInt(size) * Constants.GroupSize;
         }
     }
 }

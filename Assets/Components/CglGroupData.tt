@@ -7,10 +7,10 @@ using Unity.Entities;
 public struct CglGroupData : IComponentData
 {
 <#
-    for (var i = 0; i < 16; i++)
+    for (var i = 0; i < 4 * 4; i++)
     {
 #>
-        public ulong Alive<#=i#>;
+        public ulong Alive<#= i #>;
 <#
     }
 #>
