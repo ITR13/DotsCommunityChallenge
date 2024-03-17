@@ -19,6 +19,7 @@ public enum Algorithm
     QuadTree,
     EntityHashMap,
     EdgeHashMap,
+    // Sixes, Nope, not typing that all out
 
     // ReSharper disable once InconsistentNaming
     MAX_VALUE,
