@@ -92,21 +92,22 @@ public class LoadScript : MonoBehaviour
             {
                 if (_selectedPattern == 4)
                 {
-                    toSpawn.Data.Alive1 = random.NextUInt();
-                    toSpawn.Data.Alive2 = random.NextUInt();
-                    toSpawn.Data.Alive3 = random.NextUInt();
-                    toSpawn.Data.Alive4 = random.NextUInt();
-                    toSpawn.Data.Alive5 = random.NextUInt();
-                    toSpawn.Data.Alive6 = random.NextUInt();
-                    toSpawn.Data.Alive7 = random.NextUInt();
-                    toSpawn.Data.Alive8 = random.NextUInt();
-                    toSpawn.Data.Alive9 = random.NextUInt();
-                    toSpawn.Data.Alive10 = random.NextUInt();
-                    toSpawn.Data.Alive11 = random.NextUInt();
-                    toSpawn.Data.Alive12 = random.NextUInt();
-                    toSpawn.Data.Alive13 = random.NextUInt();
-                    toSpawn.Data.Alive14 = random.NextUInt();
-                    toSpawn.Data.Alive15 = random.NextUInt();
+                    toSpawn.Data.Alive0 = random.NextUInt() |(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive1 = random.NextUInt() |(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive2 = random.NextUInt() |(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive3 = random.NextUInt() |(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive4 = random.NextUInt() |(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive5 = random.NextUInt() |(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive6 = random.NextUInt() |(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive7 = random.NextUInt() |(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive8 = random.NextUInt() |(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive9 = random.NextUInt() |(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive10 = random.NextUInt()|(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive11 = random.NextUInt()|(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive12 = random.NextUInt()|(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive13 = random.NextUInt()|(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive14 = random.NextUInt()|(ulong)random.NextUInt()<<32;
+                    toSpawn.Data.Alive15 = random.NextUInt()|(ulong)random.NextUInt()<<32;
                 }
                 
                 var group = em.CreateEntity(typeof(GroupPosition), typeof(CurrentCglGroup), typeof(NextCglGroup));
@@ -209,25 +210,22 @@ public class LoadScript : MonoBehaviour
         {
             Data = new CglGroupData
             {
-                Alive0 = 0b1000000000000000000000001000000000000000000000000000000000000000,
-                Alive1 = 0b0001000110000000100111111010101010100010000101100110011111100100,
-                Alive2 = 0b1110010100100100100011100000001001000011110110010111101000001000,
-                Alive3 = 0b1001010110000111010010000000001000000000000000000000000100000010,
-
-                Alive4 = 0b0000000000000000000000001000000010000000100000000000000000000000,
-                Alive5 = 0b1110010010100000111001000001101110010100100000000010000100000000,
-                Alive6 = 0b0100010110010010101010110000100011101010101001001101000100000100,
-                Alive7 = 0b0100001010000000100101001110110000010011000000100001001111101100,
-
-                Alive8 = 0b0000000000000000000000000000000000000000100000001000000010000000,
-                Alive9 = 0b0100000010000000000000000010000010001001011100001101010000011011,
-                Alive10 = 0b0001000001010011100100101011100010100000111000010100110100101111,
-                Alive11 = 0b0111001100110100001000101010101001111110000000000110010000000000,
-
-                Alive12 = 0b00000000,
-                Alive13 = 0b00100000,
-                Alive14 = 0b10001000,
-                Alive15 = 0b00010011,
+                Alive0 =  0b1100000010100000100000001000000011000000000000000000000000000000,
+                Alive1 =  0b1010011110101010111010000100010110011001001110010000000000000000,
+                Alive2 =  0b0010001110000000000100000011011001011110100000100000000000000000,
+                Alive3 =  0b0001001000000000000000000000000000000000000000000000000000000000,
+                Alive4 =  0b0000000011100000001000000010000001000000000000000110000000000000,
+                Alive5 =  0b1111100100000110101001010010000001001000000000000100010000100000,
+                Alive6 =  0b0010101000000010111110101010100111110100000000010111100111001001,
+                Alive7 =  0b0010010100111011000001000000000000000100001110110010010100100001,
+                Alive8 =  0b0000000000000000010000000010000000100000111000000000000000000000,
+                Alive9 =  0b0100000000001000001000101001110011110101000001100111100110101000,
+                Alive10 = 0b1011100010101000001011100010010000010100000001001001000100100100,
+                Alive11 = 0b0000100000101010000111110000000000110001000000000001000000100000,
+                Alive12 = 0b0000000000000000000000000000000000000000000000000000000000000000,
+                Alive13 = 0b0000000000000000000000000000000000000000000010001101000001100000,
+                Alive14 = 0b0000000000000000000000000000000000000000111000101100101100010011,
+                Alive15 = 0b0000000000000000000000000000000000000000000001000001110000001101,
             },
         };
     }
