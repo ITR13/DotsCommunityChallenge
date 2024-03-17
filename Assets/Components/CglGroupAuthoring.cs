@@ -109,14 +109,21 @@ public class CglGroupAuthoring : MonoBehaviour
                 }
             );
 
-            if (authoring.transform.parent == null)
+            var parent = authoring.transform.parent;
+            if (parent == null)
             {
                 AddComponent<GroupPosition>(entity);
                 return;
             }
 
-            var siblings = authoring.transform.parent.childCount;
+            var siblings = parent.childCount;
             var index = authoring.transform.GetSiblingIndex();
+
+            if (parent.parent != null)
+            {
+                index += siblings * parent.GetSiblingIndex();
+                siblings *= parent.parent.childCount;
+            }
 
             var width = Mathf.CeilToInt(math.sqrt(siblings));
             var x = index % width;
