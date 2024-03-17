@@ -95,7 +95,11 @@ public partial struct EdgeHashMapSystem : ISystem
                 ToCreate = toCreate.AsParallelWriter(),
                 ToDestroy = toDestroy.AsParallelWriter(),
             }.ScheduleParallel(state.Dependency),
-            new QuadTreeSystem.SwapBuffersJob().ScheduleParallel(state.Dependency)
+            new QuadTreeSystem.SwapBuffersJob().ScheduleParallel(state.Dependency),
+            new QuadTreeSystem.UpdateStatsJob
+            {
+                ActiveGroups = activeGroups.AsReadOnly(),
+            }.Schedule(state.Dependency)
         );
 
         state.Dependency.Complete();

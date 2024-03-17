@@ -344,15 +344,20 @@ MonoBehaviour:
     m_MaxSize: 40
     m_Alignment: 0
     m_AlignByGeometry: 0
-    m_RichText: 0
+    m_RichText: 1
     m_HorizontalOverflow: 1
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 'Algorithm: QuadTree
+  m_Text: '<b>Algorithm:</b> QuadTree
 
-    Vis Scale: 1024
+    <b>Vis Scale:</b> 1024
 
-    Paused: True'
+    <b>Paused:</b>
+    True
+
+    <b>Active Groups:</b> 1024
+
+    <b>Inactive Groups:</b> 1024'
 --- !u!222 &864267389
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -416,7 +421,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
   m_AnchoredPosition: {x: 10, y: -10}
-  m_SizeDelta: {x: 359.3, y: 120}
+  m_SizeDelta: {x: 359.3, y: 188}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &983373409
 MonoBehaviour:

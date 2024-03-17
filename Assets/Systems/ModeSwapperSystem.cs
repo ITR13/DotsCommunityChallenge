@@ -17,6 +17,7 @@ public partial struct ModeSwapperSystem : ISystem
                 // SimulateStill = true,
             }
         );
+        state.EntityManager.CreateSingleton<Stats>();
     }
 
     public void OnUpdate(ref SystemState state)

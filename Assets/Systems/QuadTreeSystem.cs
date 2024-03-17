@@ -75,7 +75,11 @@ public partial struct QuadTreeSystem : ISystem
                 ToCreate = toCreate.AsParallelWriter(),
                 ToDestroy = toDestroy.AsParallelWriter(),
             }.ScheduleParallel(state.Dependency),
-            new SwapBuffersJob().ScheduleParallel(state.Dependency)
+            new SwapBuffersJob().ScheduleParallel(state.Dependency),
+            new UpdateStatsJob
+            {
+                ActiveGroups = activeGroups.AsReadOnly(),
+            }.Schedule(state.Dependency)
         );
 
         state.Dependency.Complete();
@@ -385,6 +389,32 @@ public partial struct QuadTreeSystem : ISystem
                     ToDestroy.Add(entity);
                 }
             }
+        }
+    }
+
+    [BurstCompile]
+    public partial struct UpdateStatsJob : IJobEntity
+    {
+        [ReadOnly] public NativeParallelHashMap<int2, bool>.ReadOnly ActiveGroups;
+
+        public void Execute(ref Stats stats)
+        {
+            var active = 0;
+            var inactive = 0;
+            foreach (var group in ActiveGroups)
+            {
+                if (group.Value)
+                {
+                    active++;
+                }
+                else
+                {
+                    inactive++;
+                }
+            }
+
+            stats.ActiveGroups = active;
+            stats.ActiveGroups = inactive;
         }
     }
 }
