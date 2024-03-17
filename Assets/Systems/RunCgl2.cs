@@ -169,7 +169,7 @@ public partial struct RunCgl2 : ISystem
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
                         var isAlive = (byte)((currentNeighbor.Data.Alive12 >> 0x38) & 1);
-                        neighbors[PosToBitIndex(3, 0, 7, 0)] = isAlive;
+                        neighbors[PosToBitIndex(Constants.GroupSize - 1, 0, Constants.BitFieldSize - 1, 0)] = isAlive;
                         hasAny |= isAlive != 0;
                     }
                 }
@@ -179,7 +179,7 @@ public partial struct RunCgl2 : ISystem
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
                         var isAlive = (byte)((currentNeighbor.Data.Alive3 >> 0x07) & 1);
-                        neighbors[PosToBitIndex(0, 3, 0, 7)] = isAlive;
+                        neighbors[PosToBitIndex(0, Constants.GroupSize - 1, 0, Constants.BitFieldSize - 1)] = isAlive;
                         hasAny |= isAlive != 0;
                     }
                 }
@@ -189,7 +189,7 @@ public partial struct RunCgl2 : ISystem
                     {
                         var currentNeighbor = CurrentLookup[currentNeighborEntity];
                         var isAlive = (byte)(currentNeighbor.Data.Alive0 & 1);
-                        neighbors[PosToBitIndex(3, 3, 7, 7)] = isAlive;
+                        neighbors[PosToBitIndex(Constants.GroupSize - 1, Constants.GroupSize - 1, Constants.BitFieldSize - 1, Constants.BitFieldSize - 1)] = isAlive;
                         hasAny |= isAlive != 0;
                     }
                 }
