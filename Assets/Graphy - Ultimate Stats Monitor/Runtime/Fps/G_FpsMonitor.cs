@@ -133,10 +133,12 @@ namespace Tayx.Graphy.Fps
 
         #region Methods -> Private
 
-        private void Init()
+        public void Init()
         {
             m_fpsSamples = new short[m_fpsSamplesCapacity];
             m_fpsSamplesSorted = new short[m_fpsSamplesCapacity];
+            m_fpsSamplesCount = 0;
+            m_indexSample = 0;
 
             UpdateParameters();
         }

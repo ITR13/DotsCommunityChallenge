@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using Tayx.Graphy.Fps;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.UI;
@@ -48,11 +49,17 @@ public class VisualController : MonoBehaviour
         var calc = _calcQuery.GetSingletonRW<CalcMode>();
         var stats = _statsQuery.GetSingleton<Stats>();
 
-        if (Input.GetKeyDown(KeyCode.L))
+        if (Input.GetKeyDown(KeyCode.L) && calc.ValueRO.ShowUi)
         {
             _loadMenu.SetActive(!_loadMenu.activeSelf);
             calc.ValueRW.Loading = _loadMenu.activeSelf;
             calc.ValueRW.Paused = true;
+        }
+
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            var fpsMonitor = FindObjectOfType<G_FpsMonitor>();
+            fpsMonitor.Init();
         }
 
         if (calc.ValueRO.Equals(_prevCalc) && _prevStats.ActiveGroups == stats.ActiveGroups && _prevStats.InactiveGroups == stats.InactiveGroups)

@@ -58,5 +58,10 @@ public partial struct ModeSwapperSystem : ISystem
             var size = math.pow(2, i - KeyCode.Alpha0 + 2);
             singleton.ValueRW.RenderSize = Mathf.RoundToInt(size) * Constants.GroupSize;
         }
+
+        if (Input.GetKeyDown(KeyCode.K))
+        {
+            singleton.ValueRW.ShowUi ^= true;
+        }
     }
 }
